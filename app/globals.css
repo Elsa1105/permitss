@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 250 250 252;
+  --foreground: 15 23 42;
+  --border: 226 232 240;
+  --muted: 100 116 139;
+  --primary: 37 99 235;
+}
+
+html, body {
+  height: 100%;
+  background: rgb(var(--background));
+  color: rgb(var(--foreground));
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 select-none;
+  }
+  .btn-primary {
+    @apply btn bg-blue-600 text-white hover:bg-blue-700;
+  }
+  .btn-secondary {
+    @apply btn bg-white border border-slate-300 text-slate-900 hover:bg-slate-50;
+  }
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-slate-700 hover:bg-slate-100;
+  }
+  .field {
+    @apply flex flex-col gap-1.5;
+  }
+  .field-label {
+    @apply text-sm font-medium text-slate-700;
+  }
+  .field-required::after {
+    content: " *";
+    @apply text-red-600;
+  }
+  .input {
+    @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500;
+  }
+  textarea.input {
+    @apply min-h-[96px] resize-y;
+  }
+  .card {
+    @apply bg-white rounded-lg border border-slate-200 shadow-sm;
+  }
+  .badge {
+    @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border;
+  }
+  .checkbox {
+    @apply h-5 w-5 rounded border-slate-400 text-blue-600 focus:ring-blue-500 cursor-pointer;
+  }
+  .table-base {
+    @apply w-full text-sm;
+  }
+  .table-base thead {
+    @apply bg-slate-50 text-slate-600 text-xs uppercase tracking-wide;
+  }
+  .table-base th {
+    @apply text-left font-medium px-4 py-3;
+  }
+  .table-base td {
+    @apply px-4 py-3 border-t border-slate-100;
+  }
+}
+
+/* Tablet-first base sizing */
+@media (min-width: 768px) {
+  html { font-size: 16px; }
+}
+@media (min-width: 1024px) {
+  html { font-size: 16px; }
+}
+
+/* Larger touch targets on tablets */
+.touch-target {
+  min-height: 44px;
+}
+
+/* Print styles for permit PDF preview */
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}
