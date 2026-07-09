@@ -641,12 +641,14 @@ function drawStage1(ctx: DrawCtx, b: PdfBundle, w: number) {
 
 function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
   const stage = b.stages.find((s) => s.stage === "II");
+
   const data =
     (stage?.data as {
       fit?: boolean;
       remarks?: string;
       position?: string;
-      checklist?: Record<string, boolean>;
+      checklist?: Record<string, boolean | string>;
+      checklist_status?: Record<string, string>;
     }) ?? {};
 
   const intro =
@@ -675,7 +677,16 @@ function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
 
   ctx.y += 15;
 
-  if (data.checklist) {
+  const checklistItems: [string, string][] = [
+    ["isolation_checked", "Isolation checked"],
+    ["barricade_installed", "Barricade installed"],
+    ["gas_test_completed", "Gas test completed"],
+    ["fire_watch_assigned", "Fire watch assigned"],
+    ["ppe_verified", "PPE verified"],
+    ["evidence_reviewed", "Evidence reviewed"],
+  ];
+
+  if (data.checklist || data.checklist_status) {
     text(ctx.page, "Condition Verification Checklist", MARGIN + 7, ctx.y, {
       font: ctx.fontBold,
       size: 8,
@@ -686,25 +697,28 @@ function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
 
     const leftX = MARGIN + 7;
     const rightX = MARGIN + 213;
-    const rowGap = 11;
+    const rowGap = 12;
 
-    const items: [string, string][] = [
-      ["isolation_checked", "Isolation checked"],
-      ["barricade_installed", "Barricade installed"],
-      ["gas_test_completed", "Gas test completed"],
-      ["fire_watch_assigned", "Fire watch assigned"],
-      ["ppe_verified", "PPE verified"],
-      ["evidence_reviewed", "Evidence reviewed"],
-    ];
+    for (let i = 0; i < checklistItems.length; i += 2) {
+      const left = checklistItems[i];
+      const right = checklistItems[i + 1];
 
-    for (let i = 0; i < items.length; i += 2) {
-      const left = items[i];
-      const right = items[i + 1];
-
-      drawCheckAt(ctx, leftX, ctx.y, data.checklist[left[0]], left[1]);
+      drawStage2StatusAt(
+        ctx,
+        leftX,
+        ctx.y,
+        getStage2Status(data, left[0]),
+        left[1],
+      );
 
       if (right) {
-        drawCheckAt(ctx, rightX, ctx.y, data.checklist[right[0]], right[1]);
+        drawStage2StatusAt(
+          ctx,
+          rightX,
+          ctx.y,
+          getStage2Status(data, right[0]),
+          right[1],
+        );
       }
 
       ctx.y += rowGap;
@@ -733,7 +747,7 @@ function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
     const lines = wrap(data.remarks, ctx.font, 8.2, w - 70);
     let yy = ctx.y;
 
-    for (const lineText of lines.slice(0, 2)) {
+    for (const lineText of lines.slice(0, 3)) {
       text(ctx.page, lineText, MARGIN + 50, yy, {
         font: ctx.font,
         size: 8.2,
@@ -743,6 +757,81 @@ function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
 
     ctx.y = yy + 1;
   }
+}
+
+function getStage2Status(
+  data: {
+    checklist?: Record<string, boolean | string>;
+    checklist_status?: Record<string, string>;
+  },
+  key: string,
+): "yes" | "no" | "na" | "unset" {
+  const explicit = data.checklist_status?.[key];
+
+  if (explicit === "yes" || explicit === "no" || explicit === "na") {
+    return explicit;
+  }
+
+  const value = data.checklist?.[key];
+
+  if (value === "yes" || value === "no" || value === "na") {
+    return value;
+  }
+
+  if (value === true) return "yes";
+  if (value === false) return "no";
+
+  return "unset";
+}
+
+function drawStage2StatusAt(
+  ctx: DrawCtx,
+  x: number,
+  yFromTop: number,
+  status: "yes" | "no" | "na" | "unset",
+  label: string,
+) {
+  const badgeW = 18;
+  const badgeH = 8.5;
+
+  const fill =
+    status === "yes"
+      ? COLOR.ok
+      : status === "no"
+        ? COLOR.bad
+        : status === "na"
+          ? COLOR.bandText
+          : COLOR.border;
+
+  const textLabel =
+    status === "yes"
+      ? "YES"
+      : status === "no"
+        ? "NO"
+        : status === "na"
+          ? "N/A"
+          : "—";
+
+  ctx.page.drawRectangle({
+    x,
+    y: A4.h - yFromTop - badgeH,
+    width: badgeW,
+    height: badgeH,
+    borderColor: fill,
+    borderWidth: 0.5,
+    color: fill,
+  });
+
+  text(ctx.page, textLabel, x + 2.4, yFromTop + 0.1, {
+    font: ctx.fontBold,
+    size: 5.5,
+    color: rgb(1, 1, 1),
+  });
+
+  text(ctx.page, label, x + badgeW + 5, yFromTop - 0.2, {
+    font: ctx.font,
+    size: 8,
+  });
 }
 
 function drawStage3(ctx: DrawCtx, b: PdfBundle, w: number) {

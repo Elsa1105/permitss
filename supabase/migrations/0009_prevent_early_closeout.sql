@@ -1,5 +1,13 @@
--- Migration 0009: Prevent multi-day permit close-out before required Day 2-14 endorsements
+-- Migration 0009: Prevent early close-out and fix Stage IV column names
+-- REPLACE your current 0009_prevent_early_closeout.sql with this file.
+-- Fix included:
+-- - Uses permit_stages.user_id, not submitted_by.
+-- - Prevents early close-out for multi-day permits.
+-- - Requires Day 2-14 endorsements before close-out.
+-- - Allows applicant, Admin, or site-scoped SRM to close out.
+
 drop function if exists public.permit_submit_stage4(uuid);
+
 create or replace function public.permit_submit_stage4(
   p_permit_id uuid
 )
@@ -9,9 +17,13 @@ security definer
 set search_path = public
 as $$
 declare
-  v_user_id uuid;
-  v_from_state text;
-  v_to_state text := 'closed_completed';
+  v_user public.users;
+  v_from_state public.permit_state;
+  v_to_state public.permit_state := 'closed_completed';
+
+  v_applicant_id uuid;
+  v_company_id uuid;
+  v_site_id uuid;
 
   v_commencement date;
   v_completion date;
@@ -21,19 +33,26 @@ declare
   v_bad_endorsements integer;
 
   v_stage_data jsonb;
+  v_acting_as text;
 begin
-  v_user_id := auth.uid();
+  select * into v_user from public.users where id = auth.uid();
 
-  if v_user_id is null then
+  if v_user is null or v_user.active is not true then
     raise exception 'Unauthorized';
   end if;
 
   select
     p.state,
+    p.applicant_id,
+    p.company_id,
+    p.site_id,
     p.date_commencement::date,
     p.date_completion::date
   into
     v_from_state,
+    v_applicant_id,
+    v_company_id,
+    v_site_id,
     v_commencement,
     v_completion
   from public.permits p
@@ -44,7 +63,14 @@ begin
     raise exception 'Permit not found';
   end if;
 
-  -- Only active / closure-ready permits can be closed.
+  if not (
+    public.is_admin()
+    or v_applicant_id = v_user.id
+    or public.has_site_role(v_company_id, v_site_id, 'srm')
+  ) then
+    raise exception 'Only the applicant, Admin, or site-scoped SRM can submit Stage IV close-out';
+  end if;
+
   if v_from_state not in (
     'approved_active',
     'pending_daily_endorsement',
@@ -63,7 +89,6 @@ begin
 
   v_total_days := (v_completion - v_commencement) + 1;
 
-  -- BUG-04 fix:
   -- Multi-day permit cannot be closed before planned completion date.
   if v_total_days > 1 and current_date < v_completion then
     raise exception
@@ -72,7 +97,6 @@ begin
   end if;
 
   -- Day 2-14 endorsement is required for multi-day permits.
-  -- Example:
   -- 1 day  = 0 endorsement required
   -- 2 days = Day 2 required
   -- 3 days = Day 2 and Day 3 required
@@ -105,12 +129,23 @@ begin
         v_required_endorsement_days,
         v_completed_endorsements;
     end if;
+  else
+    v_completed_endorsements := 0;
   end if;
+
+  v_acting_as := case
+    when v_applicant_id = v_user.id then 'self'
+    when public.is_admin() then 'admin_override'
+    else 'srm_override'
+  end;
 
   v_stage_data := jsonb_build_object(
     'closed_out', true,
-    'closed_by', v_user_id,
+    'name', v_user.full_name,
+    'department', v_user.department,
+    'closed_by', v_user.id,
     'closed_at', now(),
+    'acting_as', v_acting_as,
     'total_days', v_total_days,
     'required_endorsement_days', v_required_endorsement_days,
     'completed_endorsements', v_completed_endorsements
@@ -119,27 +154,27 @@ begin
   insert into public.permit_stages (
     permit_id,
     stage,
+    user_id,
     data,
-    submitted_by,
     submitted_at
   )
   values (
     p_permit_id,
     'IV',
+    v_user.id,
     v_stage_data,
-    v_user_id,
     now()
   )
   on conflict (permit_id, stage)
   do update set
+    user_id = excluded.user_id,
     data = excluded.data,
-    submitted_by = excluded.submitted_by,
     submitted_at = excluded.submitted_at;
 
   update public.permits
   set
     state = v_to_state,
-    closer_id = v_user_id,
+    closer_id = v_user.id,
     updated_at = now()
   where id = p_permit_id;
 
@@ -148,7 +183,7 @@ begin
     'closed',
     v_from_state,
     v_to_state,
-    null,
+    case when v_acting_as <> 'self' then v_acting_as end,
     v_stage_data
   );
 
@@ -158,7 +193,8 @@ begin
     'to_state', v_to_state,
     'total_days', v_total_days,
     'required_endorsement_days', v_required_endorsement_days,
-    'completed_endorsements', v_completed_endorsements
+    'completed_endorsements', v_completed_endorsements,
+    'acting_as', v_acting_as
   );
 end;
 $$;

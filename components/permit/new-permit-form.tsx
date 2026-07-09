@@ -28,6 +28,27 @@ interface Props {
   sites: SiteRow[];
 }
 
+type ExtendedNewPermitInput = NewPermitInput & {
+  display_applicant_name: string;
+  display_applicant_department: string;
+  other_hazard_text: string;
+};
+
+function daysBetweenInclusive(start: string, end: string) {
+  const startDate = new Date(`${start}T00:00:00`);
+  const endDate = new Date(`${end}T00:00:00`);
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return 0;
+  }
+
+  const diff = Math.floor(
+    (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+  );
+
+  return diff + 1;
+}
+
 export function NewPermitForm({ currentUser, companies, sites }: Props) {
   const router = useRouter();
 
@@ -41,9 +62,12 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
     sites[0]?.id ??
     "";
 
-  const [form, setForm] = React.useState<NewPermitInput>({
+  const [form, setForm] = React.useState<ExtendedNewPermitInput>({
     company_id: firstCompanyId,
     site_id: firstSiteId,
+
+    display_applicant_name: currentUser.full_name,
+    display_applicant_department: currentUser.department ?? "",
 
     vessel_project: "",
     location_of_work: "",
@@ -51,6 +75,7 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
     date_commencement: todayISO(),
     date_completion: todayISO(),
     hazard_types: [],
+    other_hazard_text: "",
     contractor: "",
 
     contractor_company: "",
@@ -67,32 +92,72 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
     (site) => site.company_id === form.company_id,
   );
 
-  function set<K extends keyof NewPermitInput>(
+  const selectedOtherHazard = form.hazard_types.includes("other");
+  const permitDays = daysBetweenInclusive(
+    form.date_commencement,
+    form.date_completion,
+  );
+
+  function set<K extends keyof ExtendedNewPermitInput>(
     key: K,
-    value: NewPermitInput[K],
+    value: ExtendedNewPermitInput[K],
   ) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
   function toggleHazard(value: string) {
-    setForm((current) => ({
-      ...current,
-      hazard_types: current.hazard_types.includes(value)
+    setForm((current) => {
+      const nextHazards = current.hazard_types.includes(value)
         ? current.hazard_types.filter((h) => h !== value)
-        : [...current.hazard_types, value],
-    }));
+        : [...current.hazard_types, value];
+
+      return {
+        ...current,
+        hazard_types: nextHazards,
+        other_hazard_text: nextHazards.includes("other")
+          ? current.other_hazard_text
+          : "",
+      };
+    });
+  }
+
+  function validateExtraFields() {
+    const nextErrors: Record<string, string> = {};
+
+    if (!form.display_applicant_name.trim()) {
+      nextErrors.display_applicant_name = "Applicant name is required";
+    }
+
+    if (!form.display_applicant_department.trim()) {
+      nextErrors.display_applicant_department = "Department is required";
+    }
+
+    if (selectedOtherHazard && !form.other_hazard_text.trim()) {
+      nextErrors.other_hazard_text = "Please specify the other hazard";
+    }
+
+    if (permitDays > 14) {
+      nextErrors.date_completion =
+        "Hot Work Permit validity cannot exceed 14 days for Day 2–14 endorsement flow";
+    }
+
+    return nextErrors;
   }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
 
+    const extraErrors = validateExtraFields();
+
     const parsed = NewPermitSchema.safeParse(form);
 
-    if (!parsed.success) {
-      const nextErrors: Record<string, string> = {};
+    if (!parsed.success || Object.keys(extraErrors).length > 0) {
+      const nextErrors: Record<string, string> = { ...extraErrors };
 
-      for (const issue of parsed.error.issues) {
-        nextErrors[issue.path.join(".")] = issue.message;
+      if (!parsed.success) {
+        for (const issue of parsed.error.issues) {
+          nextErrors[issue.path.join(".")] = issue.message;
+        }
       }
 
       setErrors(nextErrors);
@@ -104,10 +169,22 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
     setSubmitting(true);
 
     try {
+      const payload = {
+        ...parsed.data,
+
+        // These fields require the later schema/API/database update.
+        // They are sent here so the frontend is ready once backend fields exist.
+        display_applicant_name: form.display_applicant_name.trim(),
+        display_applicant_department: form.display_applicant_department.trim(),
+        other_hazard_text: selectedOtherHazard
+          ? form.other_hazard_text.trim()
+          : null,
+      };
+
       const res = await fetch("/api/permits", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed.data),
+        body: JSON.stringify(payload),
       });
 
       const body = await res.json();
@@ -124,6 +201,23 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
     }
   }
 
+  if (companies.length === 0 || sites.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Permit details</CardTitle>
+        </CardHeader>
+
+        <CardBody>
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            Company/site setup is incomplete. Please ask an admin to create
+            active company and site records first.
+          </div>
+        </CardBody>
+      </Card>
+    );
+  }
+
   return (
     <form onSubmit={onSubmit}>
       <Card>
@@ -133,12 +227,23 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
 
         <CardBody className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input label="Applicant" defaultValue={currentUser.full_name} disabled />
+            <Input
+              label="Applicant"
+              required
+              value={form.display_applicant_name}
+              onChange={(e) => set("display_applicant_name", e.target.value)}
+              error={errors.display_applicant_name}
+              hint="Editable because one department may have more than one applicant."
+            />
 
             <Input
               label="Department"
-              defaultValue={currentUser.department ?? "—"}
-              disabled
+              required
+              value={form.display_applicant_department}
+              onChange={(e) =>
+                set("display_applicant_department", e.target.value)
+              }
+              error={errors.display_applicant_department}
             />
           </div>
 
@@ -202,7 +307,8 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
                   Guest Applicant / Contractor Details
                 </h3>
                 <p className="text-xs text-amber-800 mt-1">
-                  Contractor information is required for guest permit requests.
+                  Contractor information and worker briefing confirmation are
+                  required for guest permit requests.
                 </p>
               </div>
 
@@ -256,8 +362,9 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
                 />
 
                 <span>
-                  I acknowledge that workers have been briefed on the work scope,
-                  hazards, controls, emergency response, and permit conditions.
+                  I acknowledge that workers have been briefed on the work
+                  scope, hazards, controls, emergency response, and permit
+                  conditions.
                 </span>
               </label>
 
@@ -281,11 +388,16 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
 
             <Input
               label="Contractor"
-              required
+              required={isGuestApplicant}
               name="contractor"
               value={form.contractor}
               onChange={(e) => set("contractor", e.target.value)}
               error={errors.contractor}
+              hint={
+                isGuestApplicant
+                  ? undefined
+                  : "Required only when contractor is involved."
+              }
             />
           </div>
 
@@ -316,7 +428,17 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
               min={todayISO()}
               name="date_commencement"
               value={form.date_commencement}
-              onChange={(e) => set("date_commencement", e.target.value)}
+              onChange={(e) => {
+                const nextStart = e.target.value;
+                setForm((current) => ({
+                  ...current,
+                  date_commencement: nextStart,
+                  date_completion:
+                    current.date_completion < nextStart
+                      ? nextStart
+                      : current.date_completion,
+                }));
+              }}
               error={errors.date_commencement}
             />
 
@@ -328,15 +450,22 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
               name="date_completion"
               value={form.date_completion}
               onChange={(e) => set("date_completion", e.target.value)}
-              hint="Defines validity. Permits >1 day require daily SRM endorsement."
+              hint="Maximum 14 days for Day 2–14 endorsement flow."
               error={errors.date_completion}
             />
           </div>
 
+          {permitDays > 1 ? (
+            <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+              This is a multi-day permit. SRM endorsement is required from Day 2
+              to Day {Math.min(permitDays, 14)}.
+            </div>
+          ) : null}
+
           <div className="field">
             <span className="field-label field-required">Type of Hazard</span>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {HAZARD_TYPES.map((hazard) => {
                 const active = form.hazard_types.includes(hazard.value);
 
@@ -346,7 +475,7 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
                     key={hazard.value}
                     onClick={() => toggleHazard(hazard.value)}
                     className={
-                      "px-3 py-2.5 rounded-md border text-sm font-medium transition-colors touch-target " +
+                      "px-3 py-2.5 rounded-md border text-sm font-medium transition-colors touch-target text-left " +
                       (active
                         ? "bg-blue-600 text-white border-blue-600"
                         : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50")
@@ -363,6 +492,17 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
               <p className="text-xs text-red-600">{errors.hazard_types}</p>
             ) : null}
           </div>
+
+          {selectedOtherHazard ? (
+            <Textarea
+              label="Other Hazard Details"
+              required
+              placeholder="Specify the other hot work hazard."
+              value={form.other_hazard_text}
+              onChange={(e) => set("other_hazard_text", e.target.value)}
+              error={errors.other_hazard_text}
+            />
+          ) : null}
         </CardBody>
 
         <CardFooter>

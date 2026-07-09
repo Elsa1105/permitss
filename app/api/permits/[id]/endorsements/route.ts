@@ -8,15 +8,21 @@ export async function POST(
 ) {
   const { id } = await ctx.params;
   const supabase = await createServerSupabase();
+
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!auth.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const raw = await request.json().catch(() => null);
+
   const parsed = EndorsementSchema.safeParse({
     day_number: Number(raw?.day),
     action: raw?.action,
     remarks: raw?.remarks ?? undefined,
   });
+
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Validation failed" },
@@ -28,8 +34,12 @@ export async function POST(
     p_permit_id: id,
     p_day: parsed.data.day_number,
     p_action: parsed.data.action,
-    p_remarks: parsed.data.remarks ?? null,
+    p_remarks: parsed.data.remarks?.trim() || null,
   });
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
   return NextResponse.json(data);
 }

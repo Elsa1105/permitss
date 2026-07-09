@@ -1,94 +1,188 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { NewPermitSchema } from "@/lib/permits/schemas";
 
-export async function GET() {
+const ALLOWED_CREATOR_ROLES = new Set([
+  "applicant",
+  "guest_applicant",
+  "contractor",
+  "admin",
+  "srm",
+]);
+
+export async function POST(request: Request) {
   const supabase = await createServerSupabase();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: actor } = await supabase
-    .from("users")
-    .select("role")
-    .eq("id", auth.user.id)
-    .single();
-  if (actor?.role !== "admin") {
-    return NextResponse.json({ error: "Admin only" }, { status: 403 });
+  const { data: auth } = await supabase.auth.getUser();
+
+  if (!auth.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data, error } = await supabase
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const parsed = NewPermitSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      {
+        error: "Validation failed",
+        issues: parsed.error.issues,
+      },
+      { status: 400 },
+    );
+  }
+
+  const payload = parsed.data;
+
+  const { data: currentUser, error: userError } = await supabase
+    .from("users")
+    .select("id, role, active")
+    .eq("id", auth.user.id)
+    .single();
+
+  if (userError || !currentUser) {
+    return NextResponse.json(
+      { error: "User profile not found" },
+      { status: 403 },
+    );
+  }
+
+  if (!currentUser.active) {
+    return NextResponse.json(
+      { error: "User account is inactive" },
+      { status: 403 },
+    );
+  }
+
+  if (!ALLOWED_CREATOR_ROLES.has(currentUser.role)) {
+    return NextResponse.json(
+      { error: "You are not allowed to create a permit" },
+      { status: 403 },
+    );
+  }
+
+  const isGuestApplicant =
+    currentUser.role === "guest_applicant" ||
+    currentUser.role === "contractor";
+
+  if (isGuestApplicant) {
+    if (!payload.contractor_company?.trim()) {
+      return NextResponse.json(
+        { error: "Contractor company is required for guest applicant" },
+        { status: 400 },
+      );
+    }
+
+    if (!payload.contractor_supervisor_name?.trim()) {
+      return NextResponse.json(
+        { error: "Contractor supervisor name is required for guest applicant" },
+        { status: 400 },
+      );
+    }
+
+    if (!payload.contractor_supervisor_registration_no?.trim()) {
+      return NextResponse.json(
+        {
+          error:
+            "Contractor supervisor registration number is required for guest applicant",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (!payload.worker_briefing_acknowledged) {
+      return NextResponse.json(
+        {
+          error:
+            "Worker briefing acknowledgement is required for guest applicant",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (!payload.top_controls_summary?.trim()) {
+      return NextResponse.json(
+        {
+          error: "Top controls summary is required for guest applicant",
+        },
+        { status: 400 },
+      );
+    }
+  }
+
+  const { data: serialData, error: serialError } = await supabase.rpc(
+    "next_permit_serial",
+    { p_permit_type: "hot_work_onshore" },
+  );
+
+  if (serialError || !serialData) {
+    return NextResponse.json(
+      { error: serialError?.message ?? "Could not generate serial number" },
+      { status: 500 },
+    );
+  }
+
+  const { data: insertedPermit, error: insertError } = await supabase
     .from("permits")
-    .select(
-      "serial_no, permit_type, state, vessel_project, location_of_work, date_commencement, date_completion, hazard_types, contractor, created_at, applicant:applicant_id(full_name, email), assessor:assessor_id(full_name), srm:srm_id(full_name), closer:closer_id(full_name)",
-    )
-    .order("created_at", { ascending: false });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    .insert({
+      serial_no: serialData as string,
+      permit_type: "hot_work_onshore",
+      company_id: payload.company_id,
+      site_id: payload.site_id,
+      state: "draft",
 
-  const rows = (data ?? []) as unknown as Array<{
-    serial_no: string;
-    permit_type: string;
-    state: string;
-    vessel_project: string;
-    location_of_work: string;
-    date_commencement: string;
-    date_completion: string;
-    hazard_types: string[];
-    contractor: string;
-    created_at: string;
-    applicant: { full_name: string; email: string } | null;
-    assessor: { full_name: string } | null;
-    srm: { full_name: string } | null;
-    closer: { full_name: string } | null;
-  }>;
+      vessel_project: payload.vessel_project,
+      location_of_work: payload.location_of_work,
+      date_commencement: payload.date_commencement,
+      date_completion: payload.date_completion,
+      description: payload.description,
+      hazard_types: payload.hazard_types,
+      contractor: payload.contractor,
 
-  const header = [
-    "serial_no",
-    "type",
-    "state",
-    "vessel_project",
-    "location_of_work",
-    "date_commencement",
-    "date_completion",
-    "hazards",
-    "contractor",
-    "applicant",
-    "assessor",
-    "srm",
-    "closer",
-    "created_at",
-  ];
-  const lines = [
-    header.map(csvCell).join(","),
-    ...rows.map((r) =>
-      [
-        r.serial_no,
-        r.permit_type,
-        r.state,
-        r.vessel_project,
-        r.location_of_work,
-        r.date_commencement,
-        r.date_completion,
-        r.hazard_types.join("|"),
-        r.contractor,
-        r.applicant?.full_name ?? "",
-        r.assessor?.full_name ?? "",
-        r.srm?.full_name ?? "",
-        r.closer?.full_name ?? "",
-        r.created_at,
-      ]
-        .map((c) => csvCell(String(c ?? "")))
-        .join(","),
-    ),
-  ];
+      contractor_company: payload.contractor_company || null,
+      contractor_supervisor_name: payload.contractor_supervisor_name || null,
+      contractor_supervisor_registration_no:
+        payload.contractor_supervisor_registration_no || null,
+      worker_briefing_acknowledged:
+        payload.worker_briefing_acknowledged ?? false,
+      top_controls_summary: payload.top_controls_summary || null,
 
-  return new NextResponse(lines.join("\n"), {
-    headers: {
-      "Content-Type": "text/csv",
-      "Content-Disposition": `attachment; filename="permits-${new Date().toISOString().slice(0, 10)}.csv"`,
+      applicant_id: auth.user.id,
+    })
+    .select("id, serial_no")
+    .single();
+
+  if (insertError || !insertedPermit) {
+    return NextResponse.json(
+      { error: insertError?.message ?? "Failed to create permit" },
+      { status: 500 },
+    );
+  }
+
+  await supabase.rpc("write_audit", {
+    p_permit_id: insertedPermit.id,
+    p_action: isGuestApplicant ? "created_by_guest_applicant" : "created",
+    p_from: null,
+    p_to: "draft",
+    p_reason: null,
+    p_metadata: {
+      actor_role: currentUser.role,
+      company_id: payload.company_id,
+      site_id: payload.site_id,
+      contractor_company: payload.contractor_company || null,
+      contractor_supervisor_name: payload.contractor_supervisor_name || null,
+      contractor_supervisor_registration_no:
+        payload.contractor_supervisor_registration_no || null,
     },
   });
-}
 
-function csvCell(s: string): string {
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
+  
+  return NextResponse.json(insertedPermit, { status: 201 });
 }

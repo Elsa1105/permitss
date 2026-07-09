@@ -5,21 +5,30 @@ import {
   createServiceRoleSupabase,
 } from "@/lib/supabase/server";
 
+const RoleSchema = z.enum([
+  "applicant",
+  "guest_applicant",
+  "contractor",
+  "assessor",
+  "srm",
+  "admin",
+]);
+
+const SiteRoleSchema = z.object({
+  company_id: z.string().uuid(),
+  site_id: z.string().uuid(),
+  role: RoleSchema,
+});
+
 const CreateUserSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   full_name: z.string().min(1),
   department: z.string().nullable().optional(),
-  role: z.enum([
-    "applicant",
-    "guest_applicant",
-    "contractor",
-    "assessor",
-    "srm",
-    "admin",
-  ]),
+  role: RoleSchema,
   qualified_for: z.array(z.string()).optional().default([]),
   active: z.boolean().optional().default(true),
+  site_roles: z.array(SiteRoleSchema).optional().default([]),
 });
 
 export async function POST(request: Request) {
@@ -125,6 +134,28 @@ export async function POST(request: Request) {
     );
   }
 
+  if (payload.site_roles.length > 0) {
+    const { error: siteRoleError } = await admin.from("user_site_roles").upsert(
+      payload.site_roles.map((siteRole) => ({
+        user_id: created.user.id,
+        company_id: siteRole.company_id,
+        site_id: siteRole.site_id,
+        role: siteRole.role,
+        active: true,
+      })),
+      {
+        onConflict: "user_id,company_id,site_id,role",
+      },
+    );
+
+    if (siteRoleError) {
+      return NextResponse.json(
+        { error: siteRoleError.message },
+        { status: 400 },
+      );
+    }
+  }
+
   await admin.rpc("write_audit", {
     p_permit_id: null,
     p_action: "user_created",
@@ -137,6 +168,7 @@ export async function POST(request: Request) {
       role: payload.role,
       active: payload.active,
       qualified_for: payload.qualified_for,
+      site_roles: payload.site_roles,
       created_by: auth.user.id,
     },
   });

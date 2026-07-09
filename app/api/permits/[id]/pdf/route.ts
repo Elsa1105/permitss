@@ -37,21 +37,32 @@ export async function GET(
   const bucket = STORAGE_BUCKET();
 
   const photosWithBytes = await Promise.all(
-    photos.map(async (p) => {
+    photos.map(async (photo) => {
       try {
         const { data: signed } = await supabase.storage
           .from(bucket)
-          .createSignedUrl(p.storage_path, 60);
+          .createSignedUrl(photo.storage_path, 60);
 
-        if (!signed?.signedUrl) return p;
+        if (!signed?.signedUrl) {
+          return photo;
+        }
 
         const res = await fetch(signed.signedUrl);
+
+        if (!res.ok) {
+          return photo;
+        }
+
         const buf = new Uint8Array(await res.arrayBuffer());
         const mime = res.headers.get("content-type") || "image/jpeg";
 
-        return { ...p, bytes: buf, mime };
+        return {
+          ...photo,
+          bytes: buf,
+          mime,
+        };
       } catch {
-        return p;
+        return photo;
       }
     }),
   );

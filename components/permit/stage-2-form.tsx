@@ -15,9 +15,14 @@ type ChecklistKey =
   | "ppe_verified"
   | "evidence_reviewed";
 
-type ChecklistState = Record<ChecklistKey, boolean>;
+type ChecklistStatus = "unset" | "yes" | "no" | "na";
+type ChecklistState = Record<ChecklistKey, ChecklistStatus>;
 
-const CHECKLIST_ITEMS: { key: ChecklistKey; label: string }[] = [
+const CHECKLIST_ITEMS: {
+  key: ChecklistKey;
+  label: string;
+  description?: string;
+}[] = [
   {
     key: "isolation_checked",
     label: "Isolation checked",
@@ -45,12 +50,12 @@ const CHECKLIST_ITEMS: { key: ChecklistKey; label: string }[] = [
 ];
 
 const INITIAL_CHECKLIST: ChecklistState = {
-  isolation_checked: false,
-  barricade_installed: false,
-  gas_test_completed: false,
-  fire_watch_assigned: false,
-  ppe_verified: false,
-  evidence_reviewed: false,
+  isolation_checked: "unset",
+  barricade_installed: "unset",
+  gas_test_completed: "unset",
+  fire_watch_assigned: "unset",
+  ppe_verified: "unset",
+  evidence_reviewed: "unset",
 };
 
 export function Stage2Form({ permitId }: { permitId: string }) {
@@ -63,38 +68,94 @@ export function Stage2Form({ permitId }: { permitId: string }) {
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const allChecklistCompleted = CHECKLIST_ITEMS.every(
-    (item) => checklist[item.key],
+  const hasUnset = CHECKLIST_ITEMS.some(
+    (item) => checklist[item.key] === "unset",
   );
 
-  function toggleChecklistItem(key: ChecklistKey) {
+  const hasNo = CHECKLIST_ITEMS.some((item) => checklist[item.key] === "no");
+
+  const hasNa = CHECKLIST_ITEMS.some((item) => checklist[item.key] === "na");
+
+  const allSatisfiedForFit = !hasUnset && !hasNo;
+
+  function setChecklistItem(key: ChecklistKey, status: ChecklistStatus) {
     setChecklist((current) => ({
       ...current,
-      [key]: !current[key],
+      [key]: status,
     }));
+  }
+
+  function buildNaSummary() {
+    const naLabels = CHECKLIST_ITEMS.filter(
+      (item) => checklist[item.key] === "na",
+    ).map((item) => item.label);
+
+    if (!naLabels.length) return "";
+
+    return `N/A items: ${naLabels.join(", ")}.`;
+  }
+
+  function checklistForCurrentBackend() {
+    return CHECKLIST_ITEMS.reduce(
+      (acc, item) => {
+        const status = checklist[item.key];
+
+        acc[item.key] = status === "yes" || status === "na";
+
+        return acc;
+      },
+      {} as Record<ChecklistKey, boolean>,
+    );
+  }
+
+  function checklistStatusPayload() {
+    return CHECKLIST_ITEMS.reduce(
+      (acc, item) => {
+        acc[item.key] = checklist[item.key];
+        return acc;
+      },
+      {} as Record<ChecklistKey, ChecklistStatus>,
+    );
   }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     if (fit === null) {
-      setError("Please mark fit or not fit.");
+      setError("Please mark Fit or Not Fit.");
       return;
     }
 
-    if (fit === true && !allChecklistCompleted) {
-      setError(
-        "Please complete all condition-verification checklist items before marking the permit fit for hot work.",
-      );
+    if (hasUnset) {
+      setError("Please select Yes, No, or N/A for every checklist item.");
       return;
     }
 
     const cleanedRemarks = remarks.trim();
 
-    if (!fit && cleanedRemarks.length === 0) {
-      setError("Remarks are required when marking not fit.");
+    if (fit === true && hasNo) {
+      setError(
+        "Permit cannot be marked Fit while any checklist item is marked No.",
+      );
       return;
     }
+
+    if (fit === true && hasNa && cleanedRemarks.length === 0) {
+      setError("Remarks are required when any checklist item is marked N/A.");
+      return;
+    }
+
+    if (fit === false && cleanedRemarks.length === 0) {
+      setError("Remarks are required when marking Not Fit.");
+      return;
+    }
+
+    const naSummary = buildNaSummary();
+
+    const remarksWithNa =
+      naSummary && !cleanedRemarks.includes(naSummary)
+        ? `${cleanedRemarks}${cleanedRemarks ? "\n\n" : ""}${naSummary}`
+        : cleanedRemarks;
 
     setError(null);
     setSubmitting(true);
@@ -105,8 +166,11 @@ export function Stage2Form({ permitId }: { permitId: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fit,
-          remarks: cleanedRemarks,
-          checklist,
+          remarks: remarksWithNa,
+          checklist: checklistForCurrentBackend(),
+
+          // Future-ready payload for the later schema/RPC update.
+          checklist_status: checklistStatusPayload(),
         }),
       });
 
@@ -141,46 +205,67 @@ export function Stage2Form({ permitId }: { permitId: string }) {
             Condition Verification Checklist
           </h4>
           <p className="text-xs text-slate-600 mt-1">
-            Safety Assessor must verify the following conditions before marking
-            the permit fit for hot work.
+            Select Yes, No, or N/A. N/A is allowed for items that are not
+            applicable, but remarks are required.
           </p>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-2">
-          {CHECKLIST_ITEMS.map((item) => (
-            <label
-              key={item.key}
-              className={cn(
-                "flex items-center gap-3 rounded-md border p-3 text-sm cursor-pointer transition-colors",
-                checklist[item.key]
-                  ? "border-emerald-500 bg-emerald-50 text-emerald-800"
-                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
-              )}
-            >
-              <input
-                type="checkbox"
-                checked={checklist[item.key]}
-                onChange={() => toggleChecklistItem(item.key)}
-                className="h-4 w-4 rounded border-slate-300"
-              />
-              <span>{item.label}</span>
-            </label>
-          ))}
+        <div className="space-y-3">
+          {CHECKLIST_ITEMS.map((item) => {
+            const status = checklist[item.key];
+
+            return (
+              <div
+                key={item.key}
+                className="rounded-md border border-slate-200 bg-white p-3"
+              >
+                <div className="mb-2 text-sm font-medium text-slate-900">
+                  {item.label}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <StatusButton
+                    label="Yes"
+                    active={status === "yes"}
+                    tone="ok"
+                    onClick={() => setChecklistItem(item.key, "yes")}
+                  />
+
+                  <StatusButton
+                    label="No"
+                    active={status === "no"}
+                    tone="bad"
+                    onClick={() => setChecklistItem(item.key, "no")}
+                  />
+
+                  <StatusButton
+                    label="N/A"
+                    active={status === "na"}
+                    tone="neutral"
+                    onClick={() => setChecklistItem(item.key, "na")}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
 
-        {!allChecklistCompleted ? (
+        {hasUnset ? (
           <p className="text-xs text-amber-700">
-            All checklist items must be completed before selecting Fit for Hot
-            Work.
+            Every checklist item must be marked Yes, No, or N/A.
+          </p>
+        ) : hasNo ? (
+          <p className="text-xs text-red-700">
+            Items marked No must be resolved before the permit can be marked Fit.
           </p>
         ) : (
           <p className="text-xs text-emerald-700">
-            All condition-verification checklist items have been completed.
+            Checklist is complete. Items marked N/A will be recorded in remarks.
           </p>
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <button
           type="button"
           onClick={() => setFit(true)}
@@ -190,6 +275,7 @@ export function Stage2Form({ permitId }: { permitId: string }) {
               ? "border-emerald-600 bg-emerald-50 text-emerald-700"
               : "border-slate-300 bg-white hover:bg-slate-50",
           )}
+          disabled={!allSatisfiedForFit}
         >
           Fit for Hot Work
         </button>
@@ -209,14 +295,18 @@ export function Stage2Form({ permitId }: { permitId: string }) {
       </div>
 
       <Textarea
-        label={fit === false ? "Remarks (required)" : "Remarks (optional)"}
-        required={fit === false}
+        label={
+          fit === false || hasNa ? "Remarks (required)" : "Remarks (optional)"
+        }
+        required={fit === false || hasNa}
         value={remarks}
         onChange={(e) => setRemarks(e.target.value)}
         placeholder={
           fit === false
             ? "What conditions need to be addressed before hot work can proceed?"
-            : "Any additional notes…"
+            : hasNa
+              ? "Explain why the N/A item(s) are not applicable."
+              : "Any additional notes…"
         }
       />
 
@@ -228,5 +318,39 @@ export function Stage2Form({ permitId }: { permitId: string }) {
         </Button>
       </div>
     </form>
+  );
+}
+
+function StatusButton({
+  label,
+  active,
+  tone,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  tone: "ok" | "bad" | "neutral";
+  onClick: () => void;
+}) {
+  const activeClass =
+    tone === "ok"
+      ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+      : tone === "bad"
+        ? "border-red-600 bg-red-50 text-red-700"
+        : "border-blue-600 bg-blue-50 text-blue-700";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+        active
+          ? activeClass
+          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+      )}
+    >
+      {label}
+    </button>
   );
 }
