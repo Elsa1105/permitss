@@ -8,6 +8,14 @@ const HAZARD_VALUES = HAZARD_TYPES.map((h) => h.value) as [
 
 const MAX_PERMIT_DAYS = 14;
 
+const optionalString = z
+  .preprocess((value) => (value == null ? "" : value), z.string())
+  .transform((value) => value.trim());
+
+function requiredString(message: string) {
+  return optionalString.pipe(z.string().min(1, message));
+}
+
 function inclusiveDays(start: string, end: string) {
   const startDate = new Date(`${start}T00:00:00`);
   const endDate = new Date(`${end}T00:00:00`);
@@ -23,28 +31,37 @@ function inclusiveDays(start: string, end: string) {
   );
 }
 
+function todayInSingapore() {
+  const parts = new Intl.DateTimeFormat("en-SG", {
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === "year")?.value ?? "";
+  const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const day = parts.find((part) => part.type === "day")?.value ?? "";
+
+  return `${year}-${month}-${day}`;
+}
+
 export const NewPermitSchema = z
   .object({
     company_id: z.string().uuid("Company is required"),
     site_id: z.string().uuid("Site is required"),
 
-    display_applicant_name: z
-      .string()
-      .trim()
-      .min(1, "Applicant name is required")
-      .optional()
-      .default(""),
+    display_applicant_name: requiredString("Applicant name is required"),
 
-    // Department auto-filled from user profile if available.
-    // It must NOT block permit submission when empty.
-    display_applicant_department: z.string().optional().default(""),
+    // Department is auto-filled from user profile if available.
+    // It must not block permit submission when empty.
+    display_applicant_department: optionalString,
 
-    vessel_project: z.string().trim().min(1, "Vessel / project is required"),
-    location_of_work: z.string().trim().min(1, "Location of work is required"),
-    description: z
-      .string()
-      .trim()
-      .min(10, "Description must be at least 10 characters"),
+    vessel_project: requiredString("Vessel / project is required"),
+    location_of_work: requiredString("Location of work is required"),
+    description: optionalString.pipe(
+      z.string().min(10, "Description must be at least 10 characters"),
+    ),
 
     date_commencement: z
       .string()
@@ -58,23 +75,23 @@ export const NewPermitSchema = z
       .array(z.enum(HAZARD_VALUES))
       .min(1, "Select at least one hazard"),
 
-    other_hazard_text: z.string().optional().default(""),
+    other_hazard_text: optionalString,
 
     // Contractor is only mandatory for guest/contractor users.
     // The API route does the role-based required check.
-    contractor: z.string().optional().default(""),
+    contractor: optionalString,
 
-    contractor_company: z.string().optional().default(""),
-    contractor_supervisor_name: z.string().optional().default(""),
-    contractor_supervisor_registration_no: z.string().optional().default(""),
+    contractor_company: optionalString,
+    contractor_supervisor_name: optionalString,
+    contractor_supervisor_registration_no: optionalString,
     worker_briefing_acknowledged: z.boolean().optional().default(false),
-    top_controls_summary: z.string().optional().default(""),
+    top_controls_summary: optionalString,
   })
   .refine((v) => v.date_completion >= v.date_commencement, {
     message: "Completion date must be on or after commencement",
     path: ["date_completion"],
   })
-  .refine((v) => v.date_commencement >= new Date().toISOString().slice(0, 10), {
+  .refine((v) => v.date_commencement >= todayInSingapore(), {
     message: "Commencement cannot be before today",
     path: ["date_commencement"],
   })
@@ -136,7 +153,7 @@ export const Stage2ChecklistStatusSchema = z.object({
 export const Stage2Schema = z
   .object({
     fit: z.boolean(),
-    remarks: z.string().optional().default(""),
+    remarks: optionalString,
 
     // Backward-compatible boolean checklist.
     checklist: Stage2ChecklistBooleanSchema.optional().default({}),
@@ -208,7 +225,7 @@ export type Stage2Input = z.infer<typeof Stage2Schema>;
 export const Stage3Schema = z
   .object({
     decision: z.enum(["approve", "reject"]),
-    reason: z.string().optional().default(""),
+    reason: optionalString,
   })
   .refine((v) => v.decision === "approve" || v.reason.trim().length > 0, {
     message: "Reason is required when rejecting",
@@ -221,7 +238,7 @@ export const EndorsementSchema = z
   .object({
     day_number: z.number().int().min(2).max(14),
     action: z.enum(["continue", "reject", "revoke"]),
-    remarks: z.string().optional().default(""),
+    remarks: optionalString,
   })
   .refine((v) => v.action === "continue" || v.remarks.trim().length > 0, {
     message: "Remarks are required for reject/revoke",

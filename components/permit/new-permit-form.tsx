@@ -15,7 +15,6 @@ import {
 import { HAZARD_TYPES } from "@/lib/permits/hazards";
 import { NewPermitSchema, type NewPermitInput } from "@/lib/permits/schemas";
 import type { CompanyRow, SiteRow } from "@/lib/supabase/types";
-import { todayISO } from "@/lib/utils";
 
 interface Props {
   currentUser: {
@@ -34,6 +33,21 @@ type ExtendedNewPermitInput = NewPermitInput & {
   other_hazard_text: string;
 };
 
+function todayInSingapore() {
+  const parts = new Intl.DateTimeFormat("en-SG", {
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === "year")?.value ?? "";
+  const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const day = parts.find((part) => part.type === "day")?.value ?? "";
+
+  return `${year}-${month}-${day}`;
+}
+
 function daysBetweenInclusive(start: string, end: string) {
   const startDate = new Date(`${start}T00:00:00`);
   const endDate = new Date(`${end}T00:00:00`);
@@ -51,6 +65,7 @@ function daysBetweenInclusive(start: string, end: string) {
 
 export function NewPermitForm({ currentUser, companies, sites }: Props) {
   const router = useRouter();
+  const today = React.useMemo(() => todayInSingapore(), []);
 
   const isGuestApplicant =
     currentUser.role === "guest_applicant" ||
@@ -66,14 +81,15 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
     company_id: firstCompanyId,
     site_id: firstSiteId,
 
-    display_applicant_name: currentUser.full_name,
+    display_applicant_name:
+      currentUser.full_name?.trim() || currentUser.id || "",
     display_applicant_department: currentUser.department ?? "",
 
     vessel_project: "",
     location_of_work: "",
     description: "",
-    date_commencement: todayISO(),
-    date_completion: todayISO(),
+    date_commencement: today,
+    date_completion: today,
     hazard_types: [],
     other_hazard_text: "",
     contractor: "",
@@ -128,10 +144,6 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
       nextErrors.display_applicant_name = "Applicant name is required";
     }
 
-    if (!form.display_applicant_department.trim()) {
-      nextErrors.display_applicant_department = "Department is required";
-    }
-
     if (selectedOtherHazard && !form.other_hazard_text.trim()) {
       nextErrors.other_hazard_text = "Please specify the other hazard";
     }
@@ -149,7 +161,22 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
 
     const extraErrors = validateExtraFields();
 
-    const parsed = NewPermitSchema.safeParse(form);
+    const parsed = NewPermitSchema.safeParse({
+      ...form,
+      display_applicant_name: form.display_applicant_name.trim(),
+      display_applicant_department:
+        form.display_applicant_department?.trim() ?? "",
+      other_hazard_text: selectedOtherHazard
+        ? form.other_hazard_text.trim()
+        : "",
+      contractor: form.contractor?.trim() ?? "",
+      contractor_company: form.contractor_company?.trim() ?? "",
+      contractor_supervisor_name:
+        form.contractor_supervisor_name?.trim() ?? "",
+      contractor_supervisor_registration_no:
+        form.contractor_supervisor_registration_no?.trim() ?? "",
+      top_controls_summary: form.top_controls_summary?.trim() ?? "",
+    });
 
     if (!parsed.success || Object.keys(extraErrors).length > 0) {
       const nextErrors: Record<string, string> = { ...extraErrors };
@@ -161,7 +188,11 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
       }
 
       setErrors(nextErrors);
-      toast.error("Please fix the highlighted fields");
+
+      const firstError =
+        Object.values(nextErrors)[0] ?? "Please fix the highlighted fields";
+
+      toast.error(firstError);
       return;
     }
 
@@ -171,14 +202,12 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
     try {
       const payload = {
         ...parsed.data,
-
-        // These fields require the later schema/API/database update.
-        // They are sent here so the frontend is ready once backend fields exist.
-        display_applicant_name: form.display_applicant_name.trim(),
-        display_applicant_department: form.display_applicant_department.trim(),
+        display_applicant_name: parsed.data.display_applicant_name.trim(),
+        display_applicant_department:
+          parsed.data.display_applicant_department.trim(),
         other_hazard_text: selectedOtherHazard
-          ? form.other_hazard_text.trim()
-          : null,
+          ? parsed.data.other_hazard_text.trim()
+          : "",
       };
 
       const res = await fetch("/api/permits", {
@@ -238,12 +267,12 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
 
             <Input
               label="Department"
-              required
               value={form.display_applicant_department}
               onChange={(e) =>
                 set("display_applicant_department", e.target.value)
               }
               error={errors.display_applicant_department}
+              hint="Auto-filled from user profile if available."
             />
           </div>
 
@@ -425,11 +454,12 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
               label="Date of Commencement"
               required
               type="date"
-              min={todayISO()}
+              min={today}
               name="date_commencement"
               value={form.date_commencement}
               onChange={(e) => {
                 const nextStart = e.target.value;
+
                 setForm((current) => ({
                   ...current,
                   date_commencement: nextStart,
