@@ -3,9 +3,12 @@
 import * as React from "react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { canPerform } from "@/lib/permits/state-machine";
-import { currentPermitDay, isMultiDay, permitDayRange } from "@/lib/permits/day";
+import {
+  currentPermitDay,
+  isMultiDay,
+  permitDayRange,
+} from "@/lib/permits/day";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import { Stage1Form } from "./stage-1-form";
 import { Stage2Form } from "./stage-2-form";
@@ -23,6 +26,22 @@ import type {
   UserRow,
 } from "@/lib/supabase/types";
 
+type PermitDetailExtra = PermitWithJoins & {
+  display_applicant_name?: string | null;
+  display_applicant_department?: string | null;
+  other_hazard_text?: string | null;
+  company?: {
+    id: string;
+    code: string;
+    name: string;
+  } | null;
+  site?: {
+    id: string;
+    code: string;
+    name: string;
+  } | null;
+};
+
 interface Props {
   currentUser: UserRow;
   permit: PermitWithJoins;
@@ -34,6 +53,15 @@ interface Props {
   documentBucket?: string;
 }
 
+const STAGE2_ITEMS = [
+  ["isolation_checked", "Isolation checked"],
+  ["barricade_installed", "Barricade installed"],
+  ["gas_test_completed", "Gas test completed"],
+  ["fire_watch_assigned", "Fire watch assigned"],
+  ["ppe_verified", "PPE verified"],
+  ["evidence_reviewed", "Evidence reviewed"],
+] as const;
+
 export function PermitDetail({
   currentUser,
   permit,
@@ -44,17 +72,21 @@ export function PermitDetail({
   bucket,
   documentBucket = "permit-documents",
 }: Props) {
+  const p = permit as PermitDetailExtra;
+
   const stage1 = stages.find((s) => s.stage === "I");
   const stage2 = stages.find((s) => s.stage === "II");
   const stage3 = stages.find((s) => s.stage === "III");
   const stage4 = stages.find((s) => s.stage === "IV");
 
   const isApplicant = currentUser.id === permit.applicant_id;
-  const isAssessor = currentUser.role === "assessor" || currentUser.role === "admin";
+  const isAssessor =
+    currentUser.role === "assessor" || currentUser.role === "admin";
   const isSrm = currentUser.role === "srm" || currentUser.role === "admin";
 
   const isSrmOverride =
-    (currentUser.role === "srm" || currentUser.role === "admin") && !isApplicant;
+    (currentUser.role === "srm" || currentUser.role === "admin") &&
+    !isApplicant;
 
   const showStage1Form =
     (isApplicant || isSrmOverride) && canPerform(permit.state, "submit_stage1");
@@ -64,7 +96,9 @@ export function PermitDetail({
     (isAssessor || currentUser.role === "srm" || currentUser.role === "admin") &&
     canPerform(permit.state, "submit_stage2");
   const showStage2Override =
-    showStage2Form && currentUser.role !== "assessor" && currentUser.role !== "admin";
+    showStage2Form &&
+    currentUser.role !== "assessor" &&
+    currentUser.role !== "admin";
 
   const showStage3Form =
     isSrm &&
@@ -74,7 +108,8 @@ export function PermitDetail({
   const showStage4Form =
     (isApplicant || currentUser.role === "srm" || currentUser.role === "admin") &&
     canPerform(permit.state, "submit_stage4");
-  const showStage4Override = showStage4Form && !isApplicant && currentUser.role !== "admin";
+  const showStage4Override =
+    showStage4Form && !isApplicant && currentUser.role !== "admin";
 
   const showEndorsementForm =
     isSrm && canPerform(permit.state, "endorse_day") && isMultiDay(permit);
@@ -82,6 +117,20 @@ export function PermitDetail({
   const editableBeforeAssessment =
     (isApplicant || currentUser.role === "srm" || currentUser.role === "admin") &&
     (permit.state === "draft" || permit.state === "pending_safety_assessment");
+
+  const currentDay = currentPermitDay(permit);
+  const maxEndorsementDay = Math.min(permitDayRange(permit), 14);
+
+  const applicantName =
+    p.display_applicant_name || permit.applicant?.full_name || "—";
+
+  const applicantDepartment =
+    p.display_applicant_department || permit.applicant?.department || "—";
+
+  const hazardText = formatHazards(
+    permit.hazard_types,
+    p.other_hazard_text ?? null,
+  );
 
   return (
     <div className="space-y-6">
@@ -91,14 +140,23 @@ export function PermitDetail({
         </CardHeader>
 
         <CardBody className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <Field label="Applicant" value={applicantName} />
+          <Field label="Department" value={applicantDepartment} />
+
+          {p.company ? (
+            <Field
+              label="Company"
+              value={`${p.company.code} - ${p.company.name}`}
+            />
+          ) : null}
+
+          {p.site ? (
+            <Field label="Site" value={`${p.site.code} - ${p.site.name}`} />
+          ) : null}
+
           <Field label="Vessel / Project" value={permit.vessel_project} />
           <Field label="Location of Work" value={permit.location_of_work} />
-          <Field
-            label="Hazard Types"
-            value={permit.hazard_types
-              .join(", ")
-              .replace(/\b\w/g, (c) => c.toUpperCase())}
-          />
+          <Field label="Hazard Types" value={hazardText} />
           <Field
             label="Date of Commencement"
             value={formatDate(permit.date_commencement)}
@@ -191,8 +249,8 @@ export function PermitDetail({
         meta={
           stage1
             ? {
-                by: permit.applicant?.full_name ?? "—",
-                role: permit.applicant?.department ?? "Applicant",
+                by: applicantName,
+                role: applicantDepartment,
                 ts: stage1.submitted_at,
               }
             : null
@@ -238,7 +296,8 @@ export function PermitDetail({
               stage2.data as {
                 fit: boolean;
                 remarks?: string;
-                checklist?: Record<string, boolean>;
+                checklist?: Record<string, boolean | string>;
+                checklist_status?: Record<string, string>;
               }
             }
           />
@@ -293,22 +352,22 @@ export function PermitDetail({
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
-              <CardTitle>Day 2–{permitDayRange(permit)} Endorsements</CardTitle>
-              <Badge tone="info">Today is Day {currentPermitDay(permit)}</Badge>
+              <CardTitle>Day 2–{maxEndorsementDay} Endorsements</CardTitle>
+              <Badge tone="info">Today is Day {currentDay}</Badge>
             </div>
           </CardHeader>
 
           <CardBody className="space-y-3">
             <EndorsementGrid
               endorsements={endorsements}
-              dayRange={permitDayRange(permit)}
+              dayRange={maxEndorsementDay}
             />
 
             {showEndorsementForm ? (
               <EndorsementForm
                 permitId={permit.id}
-                day={Math.max(2, currentPermitDay(permit))}
-                maxDay={permitDayRange(permit)}
+                day={currentDay}
+                maxDay={maxEndorsementDay}
                 existingDays={endorsements.map((e) => e.day_number)}
               />
             ) : null}
@@ -345,6 +404,20 @@ export function PermitDetail({
       </StageCard>
     </div>
   );
+}
+
+function formatHazards(hazards: string[], otherText?: string | null) {
+  return hazards
+    .map((hazard) => {
+      if (hazard === "other" && otherText) {
+        return `Other: ${otherText}`;
+      }
+
+      return hazard
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+    })
+    .join(", ");
 }
 
 function Field({
@@ -429,17 +502,28 @@ function Stage2Display({
   data: {
     fit: boolean;
     remarks?: string;
-    checklist?: Record<string, boolean>;
+    checklist?: Record<string, boolean | string>;
+    checklist_status?: Record<string, string>;
   };
 }) {
-  const checklistItems = [
-    ["isolation_checked", "Isolation checked"],
-    ["barricade_installed", "Barricade installed"],
-    ["gas_test_completed", "Gas test completed"],
-    ["fire_watch_assigned", "Fire watch assigned"],
-    ["ppe_verified", "PPE verified"],
-    ["evidence_reviewed", "Evidence reviewed"],
-  ] as const;
+  function getStatus(key: string) {
+    const explicit = data.checklist_status?.[key];
+
+    if (explicit === "yes" || explicit === "no" || explicit === "na") {
+      return explicit;
+    }
+
+    const value = data.checklist?.[key];
+
+    if (value === "yes" || value === "no" || value === "na") {
+      return value;
+    }
+
+    if (value === true) return "yes";
+    if (value === false) return "no";
+
+    return "unset";
+  }
 
   return (
     <div className="space-y-3">
@@ -447,27 +531,23 @@ function Stage2Display({
         {data.fit ? "Fit for Hot Work" : "Not Fit for Hot Work"}
       </Badge>
 
-      {data.checklist ? (
+      {data.checklist || data.checklist_status ? (
         <div>
           <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">
             Condition Verification Checklist
           </div>
 
           <ul className="space-y-1.5 text-sm">
-            {checklistItems.map(([key, label]) => (
-              <li key={key} className="flex items-start gap-2">
-                <span
-                  className={
-                    data.checklist?.[key]
-                      ? "h-5 w-5 rounded bg-emerald-600 text-white grid place-items-center text-xs"
-                      : "h-5 w-5 rounded border border-slate-300 grid place-items-center"
-                  }
-                >
-                  {data.checklist?.[key] ? "✓" : ""}
-                </span>
-                {label}
-              </li>
-            ))}
+            {STAGE2_ITEMS.map(([key, label]) => {
+              const status = getStatus(key);
+
+              return (
+                <li key={key} className="flex items-start gap-2">
+                  <StatusPill status={status} />
+                  <span>{label}</span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}
@@ -481,6 +561,38 @@ function Stage2Display({
         </p>
       ) : null}
     </div>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  if (status === "yes") {
+    return (
+      <span className="h-5 min-w-5 rounded bg-emerald-600 px-1.5 text-white grid place-items-center text-[10px]">
+        YES
+      </span>
+    );
+  }
+
+  if (status === "na") {
+    return (
+      <span className="h-5 min-w-5 rounded bg-blue-600 px-1.5 text-white grid place-items-center text-[10px]">
+        N/A
+      </span>
+    );
+  }
+
+  if (status === "no") {
+    return (
+      <span className="h-5 min-w-5 rounded bg-red-600 px-1.5 text-white grid place-items-center text-[10px]">
+        NO
+      </span>
+    );
+  }
+
+  return (
+    <span className="h-5 min-w-5 rounded border border-slate-300 px-1.5 grid place-items-center text-[10px] text-slate-400">
+      —
+    </span>
   );
 }
 

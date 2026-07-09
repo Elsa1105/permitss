@@ -26,6 +26,67 @@ export async function POST(
     );
   }
 
+  const { data: currentUser, error: userError } = await supabase
+    .from("users")
+    .select("id, role, active")
+    .eq("id", auth.user.id)
+    .single();
+
+  if (userError || !currentUser) {
+    return NextResponse.json(
+      { error: "User profile not found" },
+      { status: 403 },
+    );
+  }
+
+  if (!currentUser.active) {
+    return NextResponse.json(
+      { error: "User account is inactive" },
+      { status: 403 },
+    );
+  }
+
+  const { data: permit, error: permitError } = await supabase
+    .from("permits")
+    .select("id, applicant_id, state")
+    .eq("id", id)
+    .single();
+
+  if (permitError || !permit) {
+    return NextResponse.json({ error: "Permit not found" }, { status: 404 });
+  }
+
+  const isGuestOrContractor =
+    currentUser.role === "guest_applicant" ||
+    currentUser.role === "contractor";
+
+  const isOwnPermit = permit.applicant_id === auth.user.id;
+
+  if (isGuestOrContractor && isOwnPermit) {
+    const { count, error: documentError } = await supabase
+      .from("permit_documents")
+      .select("id", { count: "exact", head: true })
+      .eq("permit_id", id)
+      .eq("document_type", "risk_assessment");
+
+    if (documentError) {
+      return NextResponse.json(
+        { error: documentError.message },
+        { status: 400 },
+      );
+    }
+
+    if (!count || count < 1) {
+      return NextResponse.json(
+        {
+          error:
+            "Risk Assessment / RA document is required before submitting Stage I.",
+        },
+        { status: 400 },
+      );
+    }
+  }
+
   const { data, error } = await supabase.rpc("permit_submit_stage1", {
     p_permit_id: id,
     p_stage_data: parsed.data,

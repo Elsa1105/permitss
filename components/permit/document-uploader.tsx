@@ -44,6 +44,10 @@ export function DocumentUploader({
   const [uploading, setUploading] = React.useState(false);
   const [busyId, setBusyId] = React.useState<string | null>(null);
 
+  React.useEffect(() => {
+    setDocuments(initialDocuments);
+  }, [initialDocuments]);
+
   async function uploadDocument(file: File) {
     if (disabled) {
       toast.error("Document upload is disabled for this permit state.");
@@ -58,6 +62,14 @@ export function DocumentUploader({
     setUploading(true);
 
     try {
+      const userResult = await supabase.auth.getUser();
+      const userId = userResult.data.user?.id;
+
+      if (!userId) {
+        toast.error("You must be logged in to upload documents.");
+        return;
+      }
+
       const documentId = crypto.randomUUID();
       const cleanName = safeFileName(file.name);
       const storagePath = `${permitId}/${documentId}-${cleanName}`;
@@ -80,7 +92,7 @@ export function DocumentUploader({
         .insert({
           id: documentId,
           permit_id: permitId,
-          uploaded_by: (await supabase.auth.getUser()).data.user?.id,
+          uploaded_by: userId,
           document_type: documentType,
           file_name: file.name,
           storage_path: storagePath,
@@ -96,7 +108,18 @@ export function DocumentUploader({
         return;
       }
 
-      setDocuments((current) => [...current, data as PermitDocumentRow]);
+      const { data: signed } = await supabase.storage
+        .from(bucket)
+        .createSignedUrl(storagePath, 60 * 60);
+
+      setDocuments((current) => [
+        ...current,
+        {
+          ...(data as PermitDocumentRow),
+          signedUrl: signed?.signedUrl,
+        },
+      ]);
+
       toast.success("Document uploaded");
     } catch {
       toast.error("Document upload failed");
@@ -140,15 +163,6 @@ export function DocumentUploader({
     setBusyId(doc.id);
 
     try {
-      const { error: storageError } = await supabase.storage
-        .from(bucket)
-        .remove([doc.storage_path]);
-
-      if (storageError) {
-        toast.error(storageError.message);
-        return;
-      }
-
       const { error: dbError } = await supabase
         .from("permit_documents")
         .delete()
@@ -158,6 +172,8 @@ export function DocumentUploader({
         toast.error(dbError.message);
         return;
       }
+
+      await supabase.storage.from(bucket).remove([doc.storage_path]);
 
       setDocuments((current) => current.filter((item) => item.id !== doc.id));
       toast.success("Document deleted");

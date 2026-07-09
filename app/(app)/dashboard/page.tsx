@@ -10,54 +10,59 @@ import type { PermitState } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
 
+const PERMIT_CREATOR_ROLES = new Set([
+  "applicant",
+  "guest_applicant",
+  "contractor",
+  "admin",
+  "srm",
+]);
+
+const APPLICANT_QUEUE_ROLES = new Set([
+  "applicant",
+  "guest_applicant",
+  "contractor",
+]);
+
+const IN_PROGRESS_STATES: PermitState[] = [
+  "draft",
+  "pending_safety_assessment",
+  "pending_srm_approval",
+  "approved_active",
+  "pending_daily_endorsement",
+  "pending_closure",
+];
+
 export default async function DashboardPage() {
   const user = await requireUser();
 
-  // Build the right queue per role
   let myQueueStates: PermitState[] = [];
   let myQueueTitle = "Your queue";
-  if (user.role === "applicant") {
-    myQueueTitle = "Drafts & in-progress permits";
-    myQueueStates = [
-      "draft",
-      "pending_safety_assessment",
-      "pending_srm_approval",
-      "approved_active",
-      "pending_daily_endorsement",
-      "pending_closure",
-    ];
+
+  if (APPLICANT_QUEUE_ROLES.has(user.role)) {
+    myQueueTitle = "Drafts & in-progress permit requests";
+    myQueueStates = IN_PROGRESS_STATES;
   } else if (user.role === "assessor") {
     myQueueTitle = "Pending Stage II — Safety Assessment";
     myQueueStates = ["pending_safety_assessment"];
   } else if (user.role === "srm") {
-    myQueueTitle = "All in-progress permits (SRM has authority over every stage)";
-    myQueueStates = [
-      "draft",
-      "pending_safety_assessment",
-      "pending_srm_approval",
-      "approved_active",
-      "pending_daily_endorsement",
-      "pending_closure",
-    ];
+    myQueueTitle = "Permits requiring SRM action";
+    myQueueStates = IN_PROGRESS_STATES;
   } else if (user.role === "admin") {
     myQueueTitle = "All in-progress permits";
-    myQueueStates = [
-      "draft",
-      "pending_safety_assessment",
-      "pending_srm_approval",
-      "approved_active",
-      "pending_daily_endorsement",
-      "pending_closure",
-    ];
+    myQueueStates = IN_PROGRESS_STATES;
   }
 
   const queue = await listPermits({
     state: myQueueStates,
-    applicantId: user.role === "applicant" ? user.id : undefined,
+    applicantId: APPLICANT_QUEUE_ROLES.has(user.role) ? user.id : undefined,
     limit: 50,
   });
 
   const recent = await listPermits({ limit: 10 });
+
+  const canCreatePermit = PERMIT_CREATOR_ROLES.has(user.role);
+  const showRecentActivity = !APPLICANT_QUEUE_ROLES.has(user.role);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -70,19 +75,21 @@ export default async function DashboardPage() {
             {dashboardSubtitle(user.role)}
           </p>
         </div>
-        {(user.role === "applicant" || user.role === "admin" || user.role === "srm") && (
+
+        {canCreatePermit ? (
           <Link href="/permits/new">
             <Button size="lg">
               <FilePlus className="h-5 w-5" /> New Hot Work Permit
             </Button>
           </Link>
-        )}
+        ) : null}
       </div>
 
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
             <CardTitle>{myQueueTitle}</CardTitle>
+
             <Link
               href="/permits"
               className="text-sm text-blue-600 hover:underline inline-flex items-center gap-1"
@@ -91,6 +98,7 @@ export default async function DashboardPage() {
             </Link>
           </div>
         </CardHeader>
+
         <CardBody className="p-0">
           {queue.length === 0 ? (
             <EmptyState
@@ -104,11 +112,12 @@ export default async function DashboardPage() {
         </CardBody>
       </Card>
 
-      {user.role !== "applicant" && (
+      {showRecentActivity ? (
         <Card>
           <CardHeader>
             <CardTitle>Recent activity</CardTitle>
           </CardHeader>
+
           <CardBody className="p-0">
             {recent.length === 0 ? (
               <EmptyState title="No permits yet" className="border-0" />
@@ -117,7 +126,7 @@ export default async function DashboardPage() {
             )}
           </CardBody>
         </Card>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -125,13 +134,23 @@ export default async function DashboardPage() {
 function dashboardSubtitle(role: string) {
   switch (role) {
     case "applicant":
-      return "Raise a Hot Work Permit, fill Stage I, and track your in-progress permits.";
+      return "Raise a Hot Work Permit, fill Stage I, upload evidence, and track your in-progress permits.";
+
+    case "guest_applicant":
+      return "Raise contractor Hot Work Permit requests, upload RA/supporting documents, and track your submissions.";
+
+    case "contractor":
+      return "Submit contractor Hot Work Permit requests, upload RA/supporting documents, and track permit progress.";
+
     case "assessor":
-      return "Review pending Stage II permits and endorse fit / not-fit after physical inspection.";
+      return "Review pending Stage II permits and endorse fit / not-fit after condition verification.";
+
     case "srm":
-      return "Approve Stage III, endorse Day 2–14 continuations, revoke when needed, and override Stage I/II/IV when needed.";
+      return "Review SRM approvals, Day 2–14 endorsements, close-out readiness, and coordination decisions for your permitted site scope.";
+
     case "admin":
-      return "Manage users, qualified personnel, and review the full audit log.";
+      return "Manage users, qualified personnel, company/site access, and review the audit log.";
+
     default:
       return "";
   }

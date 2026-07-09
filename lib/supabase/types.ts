@@ -1,5 +1,5 @@
 // Hand-maintained DB row types matching the migrations in /supabase/migrations.
-// (Re-generate with `supabase gen types typescript` once you have a project.)
+// Re-generate with `supabase gen types typescript` once the project is stable.
 
 export type UserRole =
   | "applicant"
@@ -105,12 +105,16 @@ export interface PermitRow {
   site_id: string | null;
   state: PermitState;
 
+  display_applicant_name: string | null;
+  display_applicant_department: string | null;
+
   vessel_project: string;
   location_of_work: string;
   date_commencement: string;
   date_completion: string;
   description: string;
   hazard_types: string[];
+  other_hazard_text: string | null;
   contractor: string;
 
   contractor_company: string | null;
@@ -190,4 +194,7 @@ export interface PermitWithJoins extends PermitRow {
   assessor: Pick<UserRow, "id" | "full_name" | "department" | "email"> | null;
   srm: Pick<UserRow, "id" | "full_name" | "department" | "email"> | null;
   closer: Pick<UserRow, "id" | "full_name" | "department" | "email"> | null;
+
+  company: Pick<CompanyRow, "id" | "code" | "name"> | null;
+  site: Pick<SiteRow, "id" | "code" | "name"> | null;
 }

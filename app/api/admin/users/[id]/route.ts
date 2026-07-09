@@ -5,21 +5,28 @@ import {
   createServiceRoleSupabase,
 } from "@/lib/supabase/server";
 
+const RoleSchema = z.enum([
+  "applicant",
+  "guest_applicant",
+  "contractor",
+  "assessor",
+  "srm",
+  "admin",
+]);
+
+const SiteRoleSchema = z.object({
+  company_id: z.string().uuid(),
+  site_id: z.string().uuid(),
+  role: RoleSchema,
+});
+
 const PatchSchema = z.object({
   full_name: z.string().min(1).optional(),
   department: z.string().nullable().optional(),
-  role: z
-    .enum([
-      "applicant",
-      "guest_applicant",
-      "contractor",
-      "assessor",
-      "srm",
-      "admin",
-    ])
-    .optional(),
+  role: RoleSchema.optional(),
   qualified_for: z.array(z.string()).optional(),
   active: z.boolean().optional(),
+  site_roles: z.array(SiteRoleSchema).optional(),
 });
 
 export async function PATCH(
@@ -97,28 +104,75 @@ export async function PATCH(
 
   const { data: target, error: targetError } = await admin
     .from("users")
-    .select("id, role, active")
+    .select("*")
     .eq("id", id)
     .single();
 
   if (targetError || !target) {
-    return NextResponse.json({ error: "Target user not found" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Target user not found" },
+      { status: 404 },
+    );
   }
 
-  const updatePayload = {
-    ...patch,
-    updated_at: new Date().toISOString(),
-  };
+  const { site_roles: siteRoles, ...userPatch } = patch;
 
-  const { data, error } = await admin
-    .from("users")
-    .update(updatePayload)
-    .eq("id", id)
-    .select("*")
-    .single();
+  let data = target;
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  if (Object.keys(userPatch).length > 0) {
+    const { data: updatedUser, error } = await admin
+      .from("users")
+      .update({
+        ...userPatch,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    data = updatedUser;
+  }
+
+  if (siteRoles) {
+    const { error: deleteError } = await admin
+      .from("user_site_roles")
+      .delete()
+      .eq("user_id", id);
+
+    if (deleteError) {
+      return NextResponse.json(
+        { error: deleteError.message },
+        { status: 400 },
+      );
+    }
+
+    if (siteRoles.length > 0) {
+      const { error: insertError } = await admin
+        .from("user_site_roles")
+        .upsert(
+          siteRoles.map((siteRole) => ({
+            user_id: id,
+            company_id: siteRole.company_id,
+            site_id: siteRole.site_id,
+            role: siteRole.role,
+            active: true,
+          })),
+          {
+            onConflict: "user_id,company_id,site_id,role",
+          },
+        );
+
+      if (insertError) {
+        return NextResponse.json(
+          { error: insertError.message },
+          { status: 400 },
+        );
+      }
+    }
   }
 
   await admin.rpc("write_audit", {
@@ -138,6 +192,8 @@ export async function PATCH(
       next_active: data.active,
       previous_role: target.role,
       next_role: data.role,
+      site_roles_updated: Boolean(siteRoles),
+      site_roles: siteRoles ?? null,
       updated_by: auth.user.id,
     },
   });

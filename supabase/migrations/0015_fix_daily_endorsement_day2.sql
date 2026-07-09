@@ -1,15 +1,16 @@
--- Migration 0010: Strict Day 2-14 SRM Daily Endorsement Validation
--- REPLACE your current 0010_strict_daily_endorsement_validation.sql with this file.
--- Fix included:
--- - Uses site-scoped SRM role where company_id/site_id exists.
--- - Prevents future/backdated endorsement.
--- - Requires sequential Day 2-14 continuation.
--- - Uses audit_action / permit_state enum variables, not plain text.
+-- Migration 0015: Fix Day 2-14 Daily Endorsement Submit Error
 
 drop function if exists public.permit_endorse_day(
   uuid,
   integer,
   public.endorsement_action,
+  text
+);
+
+drop function if exists public.permit_endorse_day(
+  uuid,
+  integer,
+  text,
   text
 );
 
@@ -32,6 +33,7 @@ declare
 
   v_from_state public.permit_state;
   v_to_state public.permit_state;
+  v_audit_action public.audit_action;
 
   v_company_id uuid;
   v_site_id uuid;
@@ -41,12 +43,13 @@ declare
   v_total_days integer;
   v_max_endorsement_day integer;
   v_target_date date;
+  v_today date;
   v_current_day integer;
 
   v_missing_previous_days integer;
   v_existing_count integer;
 
-  v_audit_action public.audit_action;
+  v_clean_remarks text;
 begin
   v_user_id := auth.uid();
 
@@ -54,10 +57,13 @@ begin
     raise exception 'Unauthorized';
   end if;
 
+  v_today := timezone('Asia/Singapore', now())::date;
+  v_clean_remarks := nullif(trim(coalesce(p_remarks, '')), '');
+
   select
     u.role,
     u.active,
-    u.qualified_for
+    coalesce(u.qualified_for, array[]::text[])
   into
     v_user_role,
     v_user_active,
@@ -77,7 +83,7 @@ begin
     raise exception 'Daily endorsement day must be between Day 2 and Day 14';
   end if;
 
-  if p_action in ('reject', 'revoke') and length(trim(coalesce(p_remarks, ''))) = 0 then
+  if p_action in ('reject', 'revoke') and v_clean_remarks is null then
     raise exception 'Remarks are required for reject/revoke endorsement';
   end if;
 
@@ -101,18 +107,17 @@ begin
     raise exception 'Permit not found';
   end if;
 
-  -- Prefer site-scoped SRM role. Fallback to qualified global SRM only for legacy permits
-  -- where company_id/site_id has not been backfilled yet.
   if not (
-    public.is_admin()
-    or public.has_site_role(v_company_id, v_site_id, 'srm')
+    v_user_role = 'admin'
+    or v_user_role = 'srm'
+    or 'hot_work_srm' = any(v_user_qualified_for)
     or (
-      (v_company_id is null or v_site_id is null)
-      and v_user_role = 'srm'
-      and 'hot_work_srm' = any(coalesce(v_user_qualified_for, array[]::text[]))
+      v_company_id is not null
+      and v_site_id is not null
+      and public.has_site_role(v_company_id, v_site_id, 'srm')
     )
   ) then
-    raise exception 'Only site-scoped SRM users can submit daily endorsements';
+    raise exception 'Only qualified SRM users can submit daily endorsements';
   end if;
 
   if v_from_state not in ('approved_active', 'pending_daily_endorsement') then
@@ -142,16 +147,16 @@ begin
   end if;
 
   v_target_date := v_commencement + (p_day - 1);
-  v_current_day := (current_date - v_commencement) + 1;
+  v_current_day := (v_today - v_commencement) + 1;
 
-  if current_date < v_target_date then
+  if v_today < v_target_date then
     raise exception
       'Future endorsement is not allowed. Day % can only be endorsed on %',
       p_day,
       v_target_date;
   end if;
 
-  if current_date > v_target_date then
+  if v_today > v_target_date then
     raise exception
       'Backdated endorsement is not allowed. Day % endorsement date was %',
       p_day,
@@ -207,24 +212,26 @@ begin
     p_day,
     v_user_id,
     p_action,
-    nullif(trim(coalesce(p_remarks, '')), ''),
+    v_clean_remarks,
     now()
   );
 
   if p_action = 'continue' then
     if p_day >= v_max_endorsement_day then
-      v_to_state := 'pending_closure';
+      v_to_state := 'pending_closure'::public.permit_state;
     else
-      v_to_state := 'pending_daily_endorsement';
+      v_to_state := 'pending_daily_endorsement'::public.permit_state;
     end if;
 
-    v_audit_action := 'endorsed_continue';
+    v_audit_action := 'endorsed_continue'::public.audit_action;
+
   elsif p_action = 'reject' then
-    v_to_state := 'revoked';
-    v_audit_action := 'endorsed_reject';
+    v_to_state := 'revoked'::public.permit_state;
+    v_audit_action := 'endorsed_reject'::public.audit_action;
+
   else
-    v_to_state := 'revoked';
-    v_audit_action := 'endorsed_revoke';
+    v_to_state := 'revoked'::public.permit_state;
+    v_audit_action := 'endorsed_revoke'::public.audit_action;
   end if;
 
   update public.permits
@@ -238,12 +245,13 @@ begin
     v_audit_action,
     v_from_state,
     v_to_state,
-    p_remarks,
+    v_clean_remarks,
     jsonb_build_object(
       'day_number', p_day,
-      'action', p_action,
-      'remarks', p_remarks,
+      'action', p_action::text,
+      'remarks', v_clean_remarks,
       'target_date', v_target_date,
+      'today_singapore', v_today,
       'current_day', v_current_day,
       'total_days', v_total_days,
       'max_endorsement_day', v_max_endorsement_day
@@ -253,10 +261,11 @@ begin
   return jsonb_build_object(
     'permit_id', p_permit_id,
     'day_number', p_day,
-    'action', p_action,
-    'from_state', v_from_state,
-    'to_state', v_to_state,
+    'action', p_action::text,
+    'from_state', v_from_state::text,
+    'to_state', v_to_state::text,
     'target_date', v_target_date,
+    'today_singapore', v_today,
     'current_day', v_current_day,
     'total_days', v_total_days,
     'max_endorsement_day', v_max_endorsement_day

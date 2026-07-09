@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { NewPermitSchema } from "@/lib/permits/schemas";
 
+const ALLOWED_CREATOR_ROLES = new Set([
+  "applicant",
+  "guest_applicant",
+  "contractor",
+  "admin",
+  "srm",
+]);
+
 export async function POST(request: Request) {
   const supabase = await createServerSupabase();
 
@@ -31,6 +39,8 @@ export async function POST(request: Request) {
     );
   }
 
+  const payload = parsed.data;
+
   const { data: currentUser, error: userError } = await supabase
     .from("users")
     .select("id, role, active")
@@ -51,9 +61,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const allowedCreatorRoles = ["applicant", "guest_applicant", "contractor", "admin"];
-
-  if (!allowedCreatorRoles.includes(currentUser.role)) {
+  if (!ALLOWED_CREATOR_ROLES.has(currentUser.role)) {
     return NextResponse.json(
       { error: "You are not allowed to create a permit" },
       { status: 403 },
@@ -61,24 +69,25 @@ export async function POST(request: Request) {
   }
 
   const isGuestApplicant =
-    currentUser.role === "guest_applicant" || currentUser.role === "contractor";
+    currentUser.role === "guest_applicant" ||
+    currentUser.role === "contractor";
 
   if (isGuestApplicant) {
-    if (!parsed.data.contractor_company?.trim()) {
+    if (!payload.contractor_company?.trim()) {
       return NextResponse.json(
         { error: "Contractor company is required for guest applicant" },
         { status: 400 },
       );
     }
 
-    if (!parsed.data.contractor_supervisor_name?.trim()) {
+    if (!payload.contractor_supervisor_name?.trim()) {
       return NextResponse.json(
         { error: "Contractor supervisor name is required for guest applicant" },
         { status: 400 },
       );
     }
 
-    if (!parsed.data.contractor_supervisor_registration_no?.trim()) {
+    if (!payload.contractor_supervisor_registration_no?.trim()) {
       return NextResponse.json(
         {
           error:
@@ -88,7 +97,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!parsed.data.worker_briefing_acknowledged) {
+    if (!payload.worker_briefing_acknowledged) {
       return NextResponse.json(
         {
           error:
@@ -98,7 +107,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!parsed.data.top_controls_summary?.trim()) {
+    if (!payload.top_controls_summary?.trim()) {
       return NextResponse.json(
         {
           error: "Top controls summary is required for guest applicant",
@@ -125,26 +134,33 @@ export async function POST(request: Request) {
     .insert({
       serial_no: serialData as string,
       permit_type: "hot_work_onshore",
-      company_id: parsed.data.company_id,
-      site_id: parsed.data.site_id,
+      company_id: payload.company_id,
+      site_id: payload.site_id,
       state: "draft",
 
-      vessel_project: parsed.data.vessel_project,
-      location_of_work: parsed.data.location_of_work,
-      date_commencement: parsed.data.date_commencement,
-      date_completion: parsed.data.date_completion,
-      description: parsed.data.description,
-      hazard_types: parsed.data.hazard_types,
-      contractor: parsed.data.contractor,
+      display_applicant_name: payload.display_applicant_name || null,
+      display_applicant_department:
+        payload.display_applicant_department || null,
 
-      contractor_company: parsed.data.contractor_company || null,
+      vessel_project: payload.vessel_project,
+      location_of_work: payload.location_of_work,
+      date_commencement: payload.date_commencement,
+      date_completion: payload.date_completion,
+      description: payload.description,
+
+      hazard_types: payload.hazard_types,
+      other_hazard_text: payload.other_hazard_text || null,
+
+      contractor: payload.contractor || "",
+
+      contractor_company: payload.contractor_company || null,
       contractor_supervisor_name:
-        parsed.data.contractor_supervisor_name || null,
+        payload.contractor_supervisor_name || null,
       contractor_supervisor_registration_no:
-        parsed.data.contractor_supervisor_registration_no || null,
+        payload.contractor_supervisor_registration_no || null,
       worker_briefing_acknowledged:
-        parsed.data.worker_briefing_acknowledged ?? false,
-      top_controls_summary: parsed.data.top_controls_summary || null,
+        payload.worker_briefing_acknowledged ?? false,
+      top_controls_summary: payload.top_controls_summary || null,
 
       applicant_id: auth.user.id,
     })
@@ -166,11 +182,24 @@ export async function POST(request: Request) {
     p_reason: null,
     p_metadata: {
       actor_role: currentUser.role,
-      contractor_company: parsed.data.contractor_company || null,
+      company_id: payload.company_id,
+      site_id: payload.site_id,
+
+      display_applicant_name: payload.display_applicant_name || null,
+      display_applicant_department:
+        payload.display_applicant_department || null,
+
+      hazard_types: payload.hazard_types,
+      other_hazard_text: payload.other_hazard_text || null,
+
+      contractor_company: payload.contractor_company || null,
       contractor_supervisor_name:
-        parsed.data.contractor_supervisor_name || null,
+        payload.contractor_supervisor_name || null,
       contractor_supervisor_registration_no:
-        parsed.data.contractor_supervisor_registration_no || null,
+        payload.contractor_supervisor_registration_no || null,
+      worker_briefing_acknowledged:
+        payload.worker_briefing_acknowledged ?? false,
+      top_controls_summary: payload.top_controls_summary || null,
     },
   });
 

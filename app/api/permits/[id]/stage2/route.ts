@@ -32,7 +32,7 @@ export async function POST(
     p_permit_id: id,
     p_fit: parsed.data.fit,
     p_remarks: cleanedRemarks,
-    p_checklist: parsed.data.checklist ?? {},
+    p_checklist: parsed.data.checklist_status ?? parsed.data.checklist ?? {},
   });
 
   if (error) {
