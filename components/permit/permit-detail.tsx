@@ -92,12 +92,21 @@ export function PermitDetail({
 
   const isSrmOverride = (role === "srm" || role === "admin") && !isApplicant;
 
+  const hasStage1 = Boolean(stage1);
+  const hasStage2 = Boolean(stage2);
+  const hasStage3 = Boolean(stage3);
+  const hasStage4 = Boolean(stage4);
+
   const showStage1Form =
-    (isApplicant || isSrmOverride) && canPerform(permit.state, "submit_stage1");
+    !hasStage1 &&
+    (isApplicant || isSrmOverride) &&
+    canPerform(permit.state, "submit_stage1");
 
   const showStage1Override = !isApplicant && isSrmOverride && showStage1Form;
 
   const showStage2Form =
+    hasStage1 &&
+    !hasStage2 &&
     (isAssessor || role === "srm" || role === "admin") &&
     canPerform(permit.state, "submit_stage2");
 
@@ -105,11 +114,15 @@ export function PermitDetail({
     showStage2Form && !isRealAssessor && role !== "admin";
 
   const showStage3Form =
+    hasStage2 &&
+    !hasStage3 &&
     isSrm &&
     canPerform(permit.state, "submit_stage3") &&
     permit.applicant_id !== currentUser.id;
 
   const showStage4Form =
+    hasStage3 &&
+    !hasStage4 &&
     (isApplicant || role === "srm" || role === "admin") &&
     canPerform(permit.state, "submit_stage4");
 
@@ -117,7 +130,10 @@ export function PermitDetail({
     showStage4Form && !isApplicant && role !== "admin";
 
   const showEndorsementForm =
-    isSrm && canPerform(permit.state, "endorse_day") && isMultiDay(permit);
+    hasStage3 &&
+    isSrm &&
+    canPerform(permit.state, "endorse_day") &&
+    isMultiDay(permit);
 
   const editableBeforeAssessment =
     (isApplicant || role === "srm" || role === "admin") &&
@@ -323,7 +339,7 @@ export function PermitDetail({
         ) : (
           <PendingNotice
             msg={
-              permit.state === "draft"
+              !hasStage1
                 ? "Awaiting Stage I submission."
                 : "Pending Safety Assessor condition verification."
             }
@@ -354,7 +370,9 @@ export function PermitDetail({
             msg={
               permit.applicant_id === currentUser.id && isSrm
                 ? "Separation of duties: SRMs cannot approve permits they raised."
-                : "Pending SRM evaluation."
+                : !hasStage2
+                  ? "Pending Safety Assessor endorsement."
+                  : "Pending SRM evaluation."
             }
           />
         )}
@@ -410,7 +428,13 @@ export function PermitDetail({
             <Stage4Form permitId={permit.id} />
           </>
         ) : (
-          <PendingNotice msg="Close-out becomes available once the permit is approved/active." />
+          <PendingNotice
+            msg={
+              !hasStage3
+                ? "Close-out becomes available once SRM approval is completed."
+                : "Close-out becomes available once the permit is approved/active."
+            }
+          />
         )}
       </StageCard>
     </div>
