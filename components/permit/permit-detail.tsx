@@ -79,26 +79,30 @@ export function PermitDetail({
   const stage3 = stages.find((s) => s.stage === "III");
   const stage4 = stages.find((s) => s.stage === "IV");
 
-  const isApplicant = currentUser.id === permit.applicant_id;
-  const isAssessor =
-    currentUser.role === "assessor" || currentUser.role === "admin";
-  const isSrm = currentUser.role === "srm" || currentUser.role === "admin";
+  const role = String(currentUser.role);
 
-  const isSrmOverride =
-    (currentUser.role === "srm" || currentUser.role === "admin") &&
-    !isApplicant;
+  const isApplicant = currentUser.id === permit.applicant_id;
+
+  const isRealAssessor =
+    role === "safety_assessor" || role === "assessor";
+
+  const isAssessor = isRealAssessor || role === "admin";
+
+  const isSrm = role === "srm" || role === "admin";
+
+  const isSrmOverride = (role === "srm" || role === "admin") && !isApplicant;
 
   const showStage1Form =
     (isApplicant || isSrmOverride) && canPerform(permit.state, "submit_stage1");
+
   const showStage1Override = !isApplicant && isSrmOverride && showStage1Form;
 
   const showStage2Form =
-    (isAssessor || currentUser.role === "srm" || currentUser.role === "admin") &&
+    (isAssessor || role === "srm" || role === "admin") &&
     canPerform(permit.state, "submit_stage2");
+
   const showStage2Override =
-    showStage2Form &&
-    currentUser.role !== "assessor" &&
-    currentUser.role !== "admin";
+    showStage2Form && !isRealAssessor && role !== "admin";
 
   const showStage3Form =
     isSrm &&
@@ -106,16 +110,17 @@ export function PermitDetail({
     permit.applicant_id !== currentUser.id;
 
   const showStage4Form =
-    (isApplicant || currentUser.role === "srm" || currentUser.role === "admin") &&
+    (isApplicant || role === "srm" || role === "admin") &&
     canPerform(permit.state, "submit_stage4");
+
   const showStage4Override =
-    showStage4Form && !isApplicant && currentUser.role !== "admin";
+    showStage4Form && !isApplicant && role !== "admin";
 
   const showEndorsementForm =
     isSrm && canPerform(permit.state, "endorse_day") && isMultiDay(permit);
 
   const editableBeforeAssessment =
-    (isApplicant || currentUser.role === "srm" || currentUser.role === "admin") &&
+    (isApplicant || role === "srm" || role === "admin") &&
     (permit.state === "draft" || permit.state === "pending_safety_assessment");
 
   const currentDay = currentPermitDay(permit);
@@ -157,14 +162,17 @@ export function PermitDetail({
           <Field label="Vessel / Project" value={permit.vessel_project} />
           <Field label="Location of Work" value={permit.location_of_work} />
           <Field label="Hazard Types" value={hazardText} />
+
           <Field
             label="Date of Commencement"
             value={formatDate(permit.date_commencement)}
           />
+
           <Field
             label="Date of Completion"
             value={formatDate(permit.date_completion)}
           />
+
           <Field label="Contractor" value={permit.contractor} />
 
           {permit.contractor_company ? (
@@ -220,6 +228,7 @@ export function PermitDetail({
         <CardHeader>
           <CardTitle>Photos & Sketch</CardTitle>
         </CardHeader>
+
         <CardBody>
           <PhotoUploader
             permitId={permit.id}
@@ -234,6 +243,7 @@ export function PermitDetail({
         <CardHeader>
           <CardTitle>Supporting Documents / RA</CardTitle>
         </CardHeader>
+
         <CardBody>
           <DocumentUploader
             permitId={permit.id}
@@ -261,8 +271,9 @@ export function PermitDetail({
         ) : showStage1Form ? (
           <>
             {showStage1Override ? (
-              <OverrideNotice role={currentUser.role} stage="I" />
+              <OverrideNotice role={role} stage="I" />
             ) : null}
+
             <Stage1Form
               permitId={permit.id}
               currentUser={{
@@ -304,8 +315,9 @@ export function PermitDetail({
         ) : showStage2Form ? (
           <>
             {showStage2Override ? (
-              <OverrideNotice role={currentUser.role} stage="II" />
+              <OverrideNotice role={role} stage="II" />
             ) : null}
+
             <Stage2Form permitId={permit.id} />
           </>
         ) : (
@@ -388,14 +400,13 @@ export function PermitDetail({
         }
       >
         {stage4 ? (
-          <p className="text-sm text-slate-700">
-            Permit closed and archived.
-          </p>
+          <p className="text-sm text-slate-700">Permit closed and archived.</p>
         ) : showStage4Form ? (
           <>
             {showStage4Override ? (
-              <OverrideNotice role={currentUser.role} stage="IV" />
+              <OverrideNotice role={role} stage="IV" />
             ) : null}
+
             <Stage4Form permitId={permit.id} />
           </>
         ) : (
@@ -464,6 +475,7 @@ function StageCard({
           ) : null}
         </div>
       </CardHeader>
+
       <CardBody>{children}</CardBody>
     </Card>
   );
