@@ -8,12 +8,13 @@ const HAZARD_VALUES = HAZARD_TYPES.map((h) => h.value) as [
 
 const MAX_PERMIT_DAYS = 14;
 
-const optionalString = z
-  .preprocess((value) => (value == null ? "" : value), z.string())
-  .transform((value) => value.trim());
-
-function requiredString(message: string) {
-  return optionalString.pipe(z.string().min(1, message));
+function todaySingapore() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 function inclusiveDays(start: string, end: string) {
@@ -31,37 +32,33 @@ function inclusiveDays(start: string, end: string) {
   );
 }
 
-function todayInSingapore() {
-  const parts = new Intl.DateTimeFormat("en-SG", {
-    timeZone: "Asia/Singapore",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-
-  const year = parts.find((part) => part.type === "year")?.value ?? "";
-  const month = parts.find((part) => part.type === "month")?.value ?? "";
-  const day = parts.find((part) => part.type === "day")?.value ?? "";
-
-  return `${year}-${month}-${day}`;
-}
+const emptyString = z.preprocess(
+  (value) => (value === null || value === undefined ? "" : value),
+  z.string(),
+);
 
 export const NewPermitSchema = z
   .object({
     company_id: z.string().uuid("Company is required"),
     site_id: z.string().uuid("Site is required"),
 
-    display_applicant_name: requiredString("Applicant name is required"),
+    display_applicant_name: emptyString
+      .transform((value) => value.trim())
+      .pipe(z.string().min(1, "Applicant name is required")),
 
-    // Department is auto-filled from user profile if available.
-    // It must not block permit submission when empty.
-    display_applicant_department: optionalString,
+    display_applicant_department: emptyString.default(""),
 
-    vessel_project: requiredString("Vessel / project is required"),
-    location_of_work: requiredString("Location of work is required"),
-    description: optionalString.pipe(
-      z.string().min(10, "Description must be at least 10 characters"),
-    ),
+    vessel_project: emptyString
+      .transform((value) => value.trim())
+      .pipe(z.string().min(1, "Vessel / project is required")),
+
+    location_of_work: emptyString
+      .transform((value) => value.trim())
+      .pipe(z.string().min(1, "Location of work is required")),
+
+    description: emptyString
+      .transform((value) => value.trim())
+      .pipe(z.string().min(10, "Description must be at least 10 characters")),
 
     date_commencement: z
       .string()
@@ -75,23 +72,21 @@ export const NewPermitSchema = z
       .array(z.enum(HAZARD_VALUES))
       .min(1, "Select at least one hazard"),
 
-    other_hazard_text: optionalString,
+    other_hazard_text: emptyString.default(""),
 
-    // Contractor is only mandatory for guest/contractor users.
-    // The API route does the role-based required check.
-    contractor: optionalString,
+    contractor: emptyString.default(""),
+    contractor_company: emptyString.default(""),
+    contractor_supervisor_name: emptyString.default(""),
+    contractor_supervisor_registration_no: emptyString.default(""),
 
-    contractor_company: optionalString,
-    contractor_supervisor_name: optionalString,
-    contractor_supervisor_registration_no: optionalString,
     worker_briefing_acknowledged: z.boolean().optional().default(false),
-    top_controls_summary: optionalString,
+    top_controls_summary: emptyString.default(""),
   })
   .refine((v) => v.date_completion >= v.date_commencement, {
     message: "Completion date must be on or after commencement",
     path: ["date_completion"],
   })
-  .refine((v) => v.date_commencement >= todayInSingapore(), {
+  .refine((v) => v.date_commencement >= todaySingapore(), {
     message: "Commencement cannot be before today",
     path: ["date_commencement"],
   })
@@ -153,12 +148,8 @@ export const Stage2ChecklistStatusSchema = z.object({
 export const Stage2Schema = z
   .object({
     fit: z.boolean(),
-    remarks: optionalString,
-
-    // Backward-compatible boolean checklist.
+    remarks: emptyString.default(""),
     checklist: Stage2ChecklistBooleanSchema.optional().default({}),
-
-    // New checklist: Yes / No / N/A.
     checklist_status: Stage2ChecklistStatusSchema.optional(),
   })
   .refine((v) => v.fit || v.remarks.trim().length > 0, {
@@ -194,6 +185,21 @@ export const Stage2Schema = z
     (v) => {
       if (!v.fit || !v.checklist_status) return true;
 
+      const hasNo = Object.values(v.checklist_status).some(
+        (status) => status === "no",
+      );
+
+      return !hasNo;
+    },
+    {
+      message: "Permit cannot be marked fit while any checklist item is No",
+      path: ["checklist_status"],
+    },
+  )
+  .refine(
+    (v) => {
+      if (!v.fit || !v.checklist_status) return true;
+
       const hasNa = Object.values(v.checklist_status).some(
         (status) => status === "na",
       );
@@ -204,20 +210,6 @@ export const Stage2Schema = z
       message: "Remarks are required when any checklist item is marked N/A",
       path: ["remarks"],
     },
-  )
-  .refine(
-    (v) => {
-      if (!v.fit || !v.checklist_status) return true;
-
-      return !Object.values(v.checklist_status).some(
-        (status) => status === "no",
-      );
-    },
-    {
-      message:
-        "Permit cannot be marked fit while any checklist item is marked No",
-      path: ["checklist_status"],
-    },
   );
 
 export type Stage2Input = z.infer<typeof Stage2Schema>;
@@ -225,7 +217,7 @@ export type Stage2Input = z.infer<typeof Stage2Schema>;
 export const Stage3Schema = z
   .object({
     decision: z.enum(["approve", "reject"]),
-    reason: optionalString,
+    reason: emptyString.default(""),
   })
   .refine((v) => v.decision === "approve" || v.reason.trim().length > 0, {
     message: "Reason is required when rejecting",
@@ -238,7 +230,7 @@ export const EndorsementSchema = z
   .object({
     day_number: z.number().int().min(2).max(14),
     action: z.enum(["continue", "reject", "revoke"]),
-    remarks: optionalString,
+    remarks: emptyString.default(""),
   })
   .refine((v) => v.action === "continue" || v.remarks.trim().length > 0, {
     message: "Remarks are required for reject/revoke",
