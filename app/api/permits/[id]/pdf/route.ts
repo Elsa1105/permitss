@@ -3,11 +3,12 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import {
   getEndorsements,
   getPermit,
+  getPermitDocuments,
   getPermitStages,
   getPhotos,
 } from "@/lib/permits/queries";
 import { generatePermitPdf } from "@/lib/pdf/generate-permit-pdf";
-import { STORAGE_BUCKET } from "@/lib/supabase/env";
+import { DOCUMENT_BUCKET, STORAGE_BUCKET } from "@/lib/supabase/env";
 
 export async function GET(
   _request: Request,
@@ -28,13 +29,15 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const [stages, endorsements, photos] = await Promise.all([
+  const [stages, endorsements, photos, documents] = await Promise.all([
     getPermitStages(id),
     getEndorsements(id),
     getPhotos(id),
+    getPermitDocuments(id),
   ]);
 
   const bucket = STORAGE_BUCKET();
+  const documentBucket = DOCUMENT_BUCKET();
 
   const photosWithBytes = await Promise.all(
     photos.map(async (photo) => {
@@ -67,6 +70,23 @@ export async function GET(
     }),
   );
 
+  const documentsWithSignedUrls = await Promise.all(
+    documents.map(async (document) => {
+      try {
+        const { data: signed } = await supabase.storage
+          .from(documentBucket)
+          .createSignedUrl(document.storage_path, 60);
+
+        return {
+          ...document,
+          signedUrl: signed?.signedUrl,
+        };
+      } catch {
+        return document;
+      }
+    }),
+  );
+
   const origin =
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.NEXT_PUBLIC_SITE_URL ||
@@ -79,6 +99,7 @@ export async function GET(
     stages,
     endorsements,
     photos: photosWithBytes,
+    documents: documentsWithSignedUrls,
     publicPermitUrl,
   });
 

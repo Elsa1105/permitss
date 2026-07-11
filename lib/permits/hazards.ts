@@ -1,5 +1,3 @@
-// Hot Work hazard list based on HSE feedback.
-// These are actual risk/hazard categories, not merely activity types.
 export const HAZARD_TYPES = [
   {
     value: "fire",
@@ -48,6 +46,6 @@ export type HazardType = (typeof HAZARD_TYPES)[number]["value"];
 export function hazardLabel(value: string) {
   return (
     HAZARD_TYPES.find((hazard) => hazard.value === value)?.label ??
-    value.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    value.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase())
   );
 }

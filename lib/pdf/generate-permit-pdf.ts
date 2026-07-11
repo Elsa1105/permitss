@@ -8,6 +8,7 @@ import {
   type PDFPage,
 } from "pdf-lib";
 import type {
+  PermitDocumentRow,
   PermitEndorsementRow,
   PermitPhotoRow,
   PermitStageRow,
@@ -19,6 +20,7 @@ export interface PdfBundle {
   stages: PermitStageRow[];
   endorsements: PermitEndorsementRow[];
   photos: (PermitPhotoRow & { bytes?: Uint8Array; mime?: string })[];
+  documents?: (PermitDocumentRow & { signedUrl?: string })[];
   publicPermitUrl?: string;
 }
 
@@ -54,6 +56,9 @@ type PermitExtra = PermitWithJoins & {
   contractor_supervisor_registration_no?: string | null;
   worker_briefing_acknowledged?: boolean | null;
   top_controls_summary?: string | null;
+  display_applicant_name?: string | null;
+  display_applicant_department?: string | null;
+  other_hazard_text?: string | null;
 };
 
 function fmtDate(s: string | null | undefined): string {
@@ -214,6 +219,10 @@ export async function generatePermitPdf(bundle: PdfBundle): Promise<Uint8Array> 
 
   ctx.y += 5;
 
+  band(ctx, "SUPPORTING DOCUMENTS / RA", leftW);
+  drawDocuments(ctx, bundle.documents, leftW);
+  ctx.y += 5;
+
   band(ctx, "STAGE I : RAISING OF PERMIT-TO-WORK BY FOREMAN OR SUPERVISOR", leftW);
   drawStage1(ctx, bundle, leftW);
   ctx.y += 5;
@@ -238,6 +247,88 @@ export async function generatePermitPdf(bundle: PdfBundle): Promise<Uint8Array> 
   }
 
   return doc.save();
+}
+
+function formatHazardsForPdf(permit: PermitExtra) {
+  return permit.hazard_types
+    .map((hazard) => {
+      if (hazard === "other" && permit.other_hazard_text) {
+        return `Other: ${permit.other_hazard_text}`;
+      }
+
+      return hazard
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+    })
+    .join(", ");
+}
+
+function documentTypeLabel(type: PermitDocumentRow["document_type"]) {
+  switch (type) {
+    case "risk_assessment":
+      return "Risk Assessment / RA";
+    case "jsa":
+      return "JSA";
+    case "method_statement":
+      return "Method Statement";
+    case "gas_test_record":
+      return "Gas Test Record";
+    default:
+      return "Other";
+  }
+}
+
+function drawDocuments(
+  ctx: DrawCtx,
+  documents: (PermitDocumentRow & { signedUrl?: string })[] | undefined,
+  w: number,
+) {
+  if (!documents?.length) {
+    text(ctx.page, "No supporting documents uploaded.", MARGIN + 7, ctx.y, {
+      font: ctx.font,
+      size: 8,
+      color: COLOR.muted,
+    });
+
+    ctx.y += 12;
+    return;
+  }
+
+  for (const doc of documents.slice(0, 6)) {
+    const label = documentTypeLabel(doc.document_type);
+    const fileSize =
+      typeof doc.file_size === "number" && doc.file_size > 0
+        ? `${(doc.file_size / 1024 / 1024).toFixed(2)} MB`
+        : "—";
+
+    const lineText = `${label}: ${doc.file_name} (${fileSize})`;
+    const lines = wrap(lineText, ctx.font, 8, w - 14);
+
+    for (const lineItem of lines.slice(0, 2)) {
+      text(ctx.page, lineItem, MARGIN + 7, ctx.y, {
+        font: ctx.font,
+        size: 8,
+      });
+
+      ctx.y += 10;
+    }
+  }
+
+  if (documents.length > 6) {
+    text(
+      ctx.page,
+      `+${documents.length - 6} more supporting document(s).`,
+      MARGIN + 7,
+      ctx.y,
+      {
+        font: ctx.font,
+        size: 8,
+        color: COLOR.muted,
+      },
+    );
+
+    ctx.y += 10;
+  }
 }
 
 function drawHeaderFields(ctx: DrawCtx, bundle: PdfBundle, leftW: number) {
@@ -306,9 +397,7 @@ function drawHeaderFields(ctx: DrawCtx, bundle: PdfBundle, leftW: number) {
   drawField(
     ctx,
     "TYPE OF HAZARD",
-    permit.hazard_types
-      .map((h) => h[0]?.toUpperCase() + h.slice(1))
-      .join(", "),
+    formatHazardsForPdf(permit),
     MARGIN,
     ctx.y,
     colW,
@@ -652,11 +741,11 @@ function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
     }) ?? {};
 
   const intro =
-    "I have reviewed the permit submission, supporting evidence, work conditions, and required safety controls. Based on this condition verification, I confirm that the stated hot work location is:";
+    "I have reviewed the permit submission, supporting evidence, work conditions, and required safety controls. Based on this condition verification, I confirm whether the stated hot work location is fit to proceed.";
 
   const introLines = wrap(intro, ctx.font, 8.2, w - 12);
 
-  for (const lineText of introLines) {
+  for (const lineText of introLines.slice(0, 3)) {
     text(ctx.page, lineText, MARGIN + 7, ctx.y, {
       font: ctx.font,
       size: 8.2,
@@ -666,18 +755,39 @@ function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
 
   ctx.y += 2;
 
-  drawCheckAt(ctx, MARGIN + 7, ctx.y, data.fit === true, "Fit for hot work");
-  drawCheckAt(
-    ctx,
-    MARGIN + 155,
+  if (!stage) {
+    text(ctx.page, "Pending Safety Assessor condition verification.", MARGIN + 7, ctx.y, {
+      font: ctx.font,
+      size: 8.5,
+      color: COLOR.muted,
+    });
+
+    ctx.y += 14;
+    return;
+  }
+
+  const resultLabel =
+    data.fit === true ? "FIT FOR HOT WORK" : "NOT FIT FOR HOT WORK";
+
+  box(
+    ctx.page,
+    MARGIN + 7,
     ctx.y,
-    data.fit === false,
-    "Not fit for hot work",
+    Math.min(180, w - 14),
+    16,
+    data.fit === true ? rgb(0.92, 1, 0.96) : rgb(1, 0.93, 0.93),
+    data.fit === true ? COLOR.ok : COLOR.bad,
   );
 
-  ctx.y += 15;
+  text(ctx.page, resultLabel, MARGIN + 14, ctx.y + 4.5, {
+    font: ctx.fontBold,
+    size: 8.5,
+    color: data.fit === true ? COLOR.ok : COLOR.bad,
+  });
 
-  const checklistItems: [string, string][] = [
+  ctx.y += 23;
+
+  const items: [string, string][] = [
     ["isolation_checked", "Isolation checked"],
     ["barricade_installed", "Barricade installed"],
     ["gas_test_completed", "Gas test completed"],
@@ -693,32 +803,20 @@ function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
       color: COLOR.bandText,
     });
 
-    ctx.y += 10;
+    ctx.y += 12;
 
     const leftX = MARGIN + 7;
     const rightX = MARGIN + 213;
     const rowGap = 12;
 
-    for (let i = 0; i < checklistItems.length; i += 2) {
-      const left = checklistItems[i];
-      const right = checklistItems[i + 1];
+    for (let i = 0; i < items.length; i += 2) {
+      const left = items[i];
+      const right = items[i + 1];
 
-      drawStage2StatusAt(
-        ctx,
-        leftX,
-        ctx.y,
-        getStage2Status(data, left[0]),
-        left[1],
-      );
+      drawStage2StatusAt(ctx, leftX, ctx.y, getStage2Status(data, left[0]), left[1]);
 
       if (right) {
-        drawStage2StatusAt(
-          ctx,
-          rightX,
-          ctx.y,
-          getStage2Status(data, right[0]),
-          right[1],
-        );
+        drawStage2StatusAt(ctx, rightX, ctx.y, getStage2Status(data, right[0]), right[1]);
       }
 
       ctx.y += rowGap;
@@ -732,8 +830,8 @@ function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
     w,
     {
       name: b.permit.assessor?.full_name ?? "",
-      department: data.position ?? b.permit.assessor?.department ?? "",
-      submitted_at: stage?.submitted_at,
+      department: data.position ?? b.permit.assessor?.department ?? "Safety Assessor",
+      submitted_at: stage.submitted_at,
     },
     "POSITION",
   );

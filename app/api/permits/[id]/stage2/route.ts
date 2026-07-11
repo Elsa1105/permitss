@@ -16,23 +16,27 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await request.json().catch(() => null);
+  const body = await request.json();
   const parsed = Stage2Schema.safeParse(body);
 
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Validation failed" },
+      {
+        error: "Validation failed",
+        issues: parsed.error.issues,
+      },
       { status: 400 },
     );
   }
 
-  const cleanedRemarks = parsed.data.remarks?.trim() ?? "";
+  const checklistPayload =
+    parsed.data.checklist_status ?? parsed.data.checklist ?? {};
 
   const { data, error } = await supabase.rpc("permit_submit_stage2", {
     p_permit_id: id,
     p_fit: parsed.data.fit,
-    p_remarks: cleanedRemarks,
-    p_checklist: parsed.data.checklist_status ?? parsed.data.checklist ?? {},
+    p_remarks: parsed.data.remarks || null,
+    p_checklist: checklistPayload,
   });
 
   if (error) {
@@ -43,7 +47,7 @@ export async function POST(
     supabase,
     permitId: id,
     event: parsed.data.fit ? "stage2_fit" : "stage2_not_fit",
-    note: cleanedRemarks,
+    note: parsed.data.remarks,
   });
 
   return NextResponse.json(data);
