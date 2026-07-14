@@ -10,6 +10,7 @@ type DisplayPermit = {
   id: string;
   serial_no: string;
   state: string;
+  job_type: string | null;
   vessel_project: string;
   location_of_work: string;
   date_commencement: string;
@@ -166,6 +167,7 @@ function PermitDisplayCard({ permit }: { permit: DisplayPermit }) {
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+        <Field label="Job Type" value={permit.job_type} />
         <Field label="Location" value={permit.location_of_work} />
         <Field
           label="Validity"

@@ -84,6 +84,7 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
     display_applicant_name:
       currentUser.full_name?.trim() || currentUser.id || "",
     display_applicant_department: currentUser.department ?? "",
+    job_type: "",
 
     vessel_project: "",
     location_of_work: "",
@@ -407,6 +408,16 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
+              label="Job Type"
+              required
+              name="job_type"
+              placeholder="e.g. Welding, cutting, grinding, repair"
+              value={form.job_type}
+              onChange={(e) => set("job_type", e.target.value)}
+              error={errors.job_type}
+            />
+
+            <Input
               label="Vessel / Project"
               required
               name="vessel_project"
@@ -414,7 +425,9 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
               onChange={(e) => set("vessel_project", e.target.value)}
               error={errors.vessel_project}
             />
+          </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label="Contractor"
               required={isGuestApplicant}
@@ -428,16 +441,16 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
                   : "Required only when contractor is involved."
               }
             />
-          </div>
 
-          <Input
-            label="Location of Work"
-            required
-            name="location_of_work"
-            value={form.location_of_work}
-            onChange={(e) => set("location_of_work", e.target.value)}
-            error={errors.location_of_work}
-          />
+            <Input
+              label="Location of Work"
+              required
+              name="location_of_work"
+              value={form.location_of_work}
+              onChange={(e) => set("location_of_work", e.target.value)}
+              error={errors.location_of_work}
+            />
+          </div>
 
           <Textarea
             label="Description of Work"

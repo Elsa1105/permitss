@@ -56,7 +56,7 @@ export default async function PermitsPage() {
               className="border-0"
             />
           ) : (
-            <PermitTable permits={permits} />
+            <PermitTable permits={permits} searchable />
           )}
         </CardBody>
       </Card>

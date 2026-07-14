@@ -48,6 +48,10 @@ export const NewPermitSchema = z
 
     display_applicant_department: emptyString.default(""),
 
+    job_type: emptyString
+      .transform((value) => value.trim())
+      .pipe(z.string().min(1, "Job type is required")),
+
     vessel_project: emptyString
       .transform((value) => value.trim())
       .pipe(z.string().min(1, "Vessel / project is required")),

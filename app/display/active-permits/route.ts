@@ -17,6 +17,7 @@ export async function GET() {
         id,
         serial_no,
         state,
+        job_type,
         vessel_project,
         location_of_work,
         date_commencement,

@@ -107,7 +107,7 @@ export default async function DashboardPage() {
               className="border-0"
             />
           ) : (
-            <PermitTable permits={queue} />
+            <PermitTable permits={queue} searchable={user.role === "srm"} />
           )}
         </CardBody>
       </Card>
@@ -146,7 +146,7 @@ function dashboardSubtitle(role: string) {
       return "Review pending Stage II permits and endorse fit / not-fit after condition verification.";
 
     case "srm":
-      return "Review SRM approvals, Day 2–14 endorsements, close-out readiness, and coordination decisions for your permitted site scope.";
+      return "Review SRM / Project Manager approvals, Day 2–14 endorsements, close-out readiness, and coordination decisions for your permitted site scope.";
 
     case "admin":
       return "Manage users, qualified personnel, company/site access, and review the audit log.";

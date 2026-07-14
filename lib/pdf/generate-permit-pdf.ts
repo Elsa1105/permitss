@@ -58,6 +58,7 @@ type PermitExtra = PermitWithJoins & {
   top_controls_summary?: string | null;
   display_applicant_name?: string | null;
   display_applicant_department?: string | null;
+  job_type?: string | null;
   other_hazard_text?: string | null;
 };
 
@@ -231,7 +232,11 @@ export async function generatePermitPdf(bundle: PdfBundle): Promise<Uint8Array> 
   drawStage2(ctx, bundle, leftW);
   ctx.y += 5;
 
-  band(ctx, "STAGE III : APPROVAL BY THE SHIP-REPAIR MANAGER", leftW);
+  band(
+    ctx,
+    "STAGE III : APPROVED BY SHIP REPAIR-MANAGER / PROJECT MANAGER",
+    leftW,
+  );
   drawStage3(ctx, bundle, leftW);
   ctx.y += 5;
 
@@ -343,11 +348,21 @@ function drawHeaderFields(ctx: DrawCtx, bundle: PdfBundle, leftW: number) {
 
   drawField(
     ctx,
-    "VESSEL / PROJECT",
-    permit.vessel_project,
+    "JOB TYPE",
+    permit.job_type || "—",
     MARGIN,
     ctx.y,
-    leftW,
+    colW,
+    fieldH,
+  );
+
+  drawField(
+    ctx,
+    "VESSEL / PROJECT",
+    permit.vessel_project,
+    MARGIN + colW + colGap,
+    ctx.y,
+    colW,
     fieldH,
   );
   ctx.y += fieldH + 4;
@@ -953,16 +968,16 @@ function drawStage3(ctx: DrawCtx, b: PdfBundle, w: number) {
   if (data.reason) {
     ctx.y += 1;
 
-    text(ctx.page, "SRM Notes:", MARGIN + 7, ctx.y, {
+    text(ctx.page, "SRM / Project Manager Notes:", MARGIN + 7, ctx.y, {
       font: ctx.fontBold,
       size: 7.8,
       color: COLOR.muted,
     });
 
-    const reasonLines = wrap(data.reason, ctx.font, 8, w - 72);
+    const reasonLines = wrap(data.reason, ctx.font, 8, w - 146);
 
     for (const reasonLine of reasonLines.slice(0, 2)) {
-      text(ctx.page, reasonLine, MARGIN + 58, ctx.y, {
+      text(ctx.page, reasonLine, MARGIN + 132, ctx.y, {
         font: ctx.font,
         size: 8,
       });

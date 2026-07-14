@@ -141,6 +141,7 @@ export async function POST(request: Request) {
       display_applicant_name: payload.display_applicant_name || null,
       display_applicant_department:
         payload.display_applicant_department || null,
+      job_type: payload.job_type,
 
       vessel_project: payload.vessel_project,
       location_of_work: payload.location_of_work,
@@ -188,6 +189,7 @@ export async function POST(request: Request) {
       display_applicant_name: payload.display_applicant_name || null,
       display_applicant_department:
         payload.display_applicant_department || null,
+      job_type: payload.job_type,
 
       hazard_types: payload.hazard_types,
       other_hazard_text: payload.other_hazard_text || null,

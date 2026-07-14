@@ -122,7 +122,7 @@ export function EndorsementForm({ permitId, day, maxDay, existingDays }: Props) 
           </p>
         ) : (
           <p className="mt-1 text-xs text-slate-500">
-            Only today&apos;s permit day can be endorsed.
+            Only today&apos;s permit day can be endorsed. Any authorised SRM / Project Manager for this site may submit the endorsement for leave coverage.
           </p>
         )}
       </div>

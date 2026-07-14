@@ -107,6 +107,7 @@ export interface PermitRow {
 
   display_applicant_name: string | null;
   display_applicant_department: string | null;
+  job_type: string | null;
 
   vessel_project: string;
   location_of_work: string;

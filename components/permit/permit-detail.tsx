@@ -29,6 +29,7 @@ import type {
 type PermitDetailExtra = PermitWithJoins & {
   display_applicant_name?: string | null;
   display_applicant_department?: string | null;
+  job_type?: string | null;
   other_hazard_text?: string | null;
   company?: {
     id: string;
@@ -175,6 +176,7 @@ export function PermitDetail({
             <Field label="Site" value={`${p.site.code} - ${p.site.name}`} />
           ) : null}
 
+          <Field label="Job Type" value={p.job_type} />
           <Field label="Vessel / Project" value={permit.vessel_project} />
           <Field label="Location of Work" value={permit.location_of_work} />
           <Field label="Hazard Types" value={hazardText} />
@@ -348,12 +350,12 @@ export function PermitDetail({
       </StageCard>
 
       <StageCard
-        title="Stage III — Approval by Ship-Repair Manager"
+        title="Stage III — Approved by Ship Repair-Manager / Project Manager"
         meta={
           stage3
             ? {
                 by: permit.srm?.full_name ?? "—",
-                role: permit.srm?.department ?? "SRM",
+                role: permit.srm?.department ?? "SRM / Project Manager",
                 ts: stage3.submitted_at,
               }
             : null
@@ -372,7 +374,7 @@ export function PermitDetail({
                 ? "Separation of duties: SRMs cannot approve permits they raised."
                 : !hasStage2
                   ? "Pending Safety Assessor endorsement."
-                  : "Pending SRM evaluation."
+                  : "Pending SRM / Project Manager evaluation."
             }
           />
         )}
@@ -662,7 +664,7 @@ function PendingNotice({ msg }: { msg: string }) {
 function OverrideNotice({ role, stage }: { role: string; stage: string }) {
   const label =
     role === "srm"
-      ? "Acting as Ship-Repair Manager (override)"
+      ? "Acting as Ship Repair-Manager / Project Manager (override)"
       : "Acting as Admin (override)";
 
   return (
