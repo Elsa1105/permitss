@@ -21,6 +21,7 @@ type PermitRow = {
   id: string;
   serial_no: string;
   state: string;
+  job_type: string | null;
   vessel_project: string;
   location_of_work: string;
   description: string;
@@ -79,8 +80,8 @@ function eventLabel(event: PermitEmailEvent) {
     stage1_submitted: "Stage I Submitted",
     stage2_fit: "Stage II Endorsed Fit",
     stage2_not_fit: "Stage II Marked Not Fit",
-    stage3_approved: "Stage III Approved",
-    stage3_rejected: "Stage III Rejected",
+    stage3_approved: "Stage III Approved by SRM / Project Manager",
+    stage3_rejected: "Stage III Rejected by SRM / Project Manager",
     stage4_closed: "Stage IV Closed",
   };
 
@@ -110,6 +111,10 @@ function buildHtml(permit: PermitRow, event: PermitEmailEvent, note?: string) {
         <tr>
           <td style="padding: 6px 12px; font-weight: bold;">Status</td>
           <td style="padding: 6px 12px;">${escapeHtml(permit.state)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 6px 12px; font-weight: bold;">Job Type</td>
+          <td style="padding: 6px 12px;">${escapeHtml(permit.job_type || "—")}</td>
         </tr>
         <tr>
           <td style="padding: 6px 12px; font-weight: bold;">Vessel / Project</td>
@@ -154,6 +159,7 @@ ${eventLabel(event)}
 
 Permit No.: ${permit.serial_no}
 Status: ${permit.state}
+Job Type: ${permit.job_type || "—"}
 Vessel / Project: ${permit.vessel_project}
 Location: ${permit.location_of_work}
 Description: ${permit.description}
@@ -187,6 +193,7 @@ async function getPermit(
         id,
         serial_no,
         state,
+        job_type,
         vessel_project,
         location_of_work,
         description,

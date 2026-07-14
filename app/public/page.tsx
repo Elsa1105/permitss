@@ -11,6 +11,7 @@ type PublicPermit = {
   serial_no: string;
   state: string;
   permit_type: string;
+  job_type: string | null;
   vessel_project: string;
   location_of_work: string;
   date_commencement: string;
@@ -45,6 +46,7 @@ export default async function PublicPermitPage({
         serial_no,
         state,
         permit_type,
+        job_type,
         vessel_project,
         location_of_work,
         date_commencement,
@@ -105,6 +107,7 @@ export default async function PublicPermitPage({
           </CardHeader>
 
           <CardBody className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+            <Field label="Job Type" value={p.job_type} />
             <Field label="Vessel / Project" value={p.vessel_project} />
             <Field label="Location of Work" value={p.location_of_work} />
 
