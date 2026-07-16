@@ -11,7 +11,13 @@ interface Props {
   day: number;
   maxDay: number;
   existingDays: number[];
-  isRetrospective?: boolean;
+  /**
+   * All Day 2..today days that have not been endorsed yet (including today).
+   * A day stays in this list after its own date has passed if it was missed
+   * (public holiday, leave, oversight) — that's what allows retrospective
+   * catch-up endorsement instead of the permit getting stuck.
+   */
+  pendingDays?: number[];
 }
 
 export function EndorsementForm({
@@ -19,52 +25,54 @@ export function EndorsementForm({
   day,
   maxDay,
   existingDays,
-  isRetrospective = false,
+  pendingDays,
 }: Props) {
   const router = useRouter();
 
-  const validToday =
-    day >= 2 &&
-    day <= Math.min(maxDay, 14) &&
-    !existingDays.includes(day);
+  const availableDays =
+    pendingDays && pendingDays.length > 0
+      ? pendingDays
+      : day >= 2 && day <= Math.min(maxDay, 14) && !existingDays.includes(day)
+        ? [day]
+        : [];
 
-  const [chosenDay, setChosenDay] = React.useState(day);
+  const hasAvailableDay = availableDays.length > 0;
+
+  const [chosenDay, setChosenDay] = React.useState<number>(
+    availableDays[0] ?? day,
+  );
   const [action, setAction] = React.useState<"continue" | "reject" | "revoke">(
     "continue",
   );
   const [remarks, setRemarks] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
 
-  const dayOptions = validToday
-    ? [
-        {
-          value: String(day),
-          label: isRetrospective
-            ? `Day ${day} (overdue — retrospective)`
-            : `Day ${day}`,
-        },
-      ]
+  const dayOptions = hasAvailableDay
+    ? availableDays.map((d) => ({
+        value: String(d),
+        label: d === day ? `Day ${d} (today)` : `Day ${d} — missed, catch up`,
+      }))
     : [
         {
           value: String(day),
           label: existingDays.includes(day)
             ? `Day ${day} already endorsed`
-            : `Day ${day} not available`,
+            : `Day ${day} not available yet`,
         },
       ];
 
-  const canSubmitToday = validToday;
+  const canSubmitToday = hasAvailableDay;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     if (!canSubmitToday) {
-      toast.error("Today is not available for endorsement");
+      toast.error("No pending day is available for endorsement");
       return;
     }
 
-    if (chosenDay !== day) {
-      toast.error(`Only Day ${day} can be endorsed today`);
+    if (!availableDays.includes(chosenDay)) {
+      toast.error("Please choose one of the available pending days");
       return;
     }
 
@@ -124,22 +132,17 @@ export function EndorsementForm({
       <div>
         <h3 className="font-semibold text-sm">SRM endorsement</h3>
 
-        {!validToday ? (
+        {!hasAvailableDay ? (
           <p className="mt-1 text-xs text-amber-700">
-            No endorsement is due right now — every day up to today has
-            already been endorsed, or this permit is outside its active
-            window.
-          </p>
-        ) : isRetrospective ? (
-          <p className="mt-1 text-xs text-amber-700">
-            Day {day} was missed (public holiday, leave, or oversight) and is
-            now overdue. Submit it as a retrospective endorsement before any
-            later day can be endorsed.
+            No day is currently pending endorsement. Future days cannot be
+            endorsed in advance.
           </p>
         ) : (
           <p className="mt-1 text-xs text-slate-500">
-            Today&apos;s permit day. Any authorised SRM / Project Manager for
-            this site may submit the endorsement for leave coverage.
+            Choose today&apos;s day, or a missed day (public holiday, leave,
+            oversight) to endorse it retrospectively. Any authorised SRM /
+            Project Manager for this site may submit the endorsement for leave
+            coverage.
           </p>
         )}
       </div>
@@ -151,7 +154,7 @@ export function EndorsementForm({
           value={String(chosenDay)}
           onChange={(e) => setChosenDay(Number(e.target.value))}
           options={dayOptions}
-          disabled={!validToday}
+          disabled={!hasAvailableDay}
         />
 
         <Select
@@ -164,7 +167,7 @@ export function EndorsementForm({
             { value: "reject", label: "Reject" },
             { value: "revoke", label: "Revoke" },
           ]}
-          disabled={!validToday}
+          disabled={!hasAvailableDay}
         />
       </div>
 
@@ -173,7 +176,7 @@ export function EndorsementForm({
         required={action !== "continue"}
         value={remarks}
         onChange={(e) => setRemarks(e.target.value)}
-        disabled={!validToday}
+        disabled={!hasAvailableDay}
       />
 
       <div className="flex justify-end">

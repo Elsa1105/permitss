@@ -1731,6 +1731,25 @@ async function drawPhotos(
       },
     );
 
+    if (photo.caption) {
+      const captionLines = wrap(
+        `Comment: ${photo.caption}`,
+        font,
+        7.5,
+        cardW - 20,
+      );
+
+      captionLines.slice(0, 2).forEach((lineText, lineIdx) => {
+        page.drawText(lineText, {
+          x: x + 10,
+          y: A4.h - captionTop - 32 - lineIdx * 10,
+          size: 7.5,
+          font,
+          color: COLOR.ink,
+        });
+      });
+    }
+
     index += 1;
   }
 }
