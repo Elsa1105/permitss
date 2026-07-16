@@ -145,17 +145,13 @@ export function PermitDetail({
 
   const endorsedDays = new Set(endorsements.map((e) => e.day_number));
 
-  // Earliest day from 2..currentDay that has not yet been endorsed. This is
-  // the day the SRM should submit next — if a day was missed (public
-  // holiday, leave, oversight), this surfaces that day instead of forcing
-  // "today only", enabling retrospective catch-up.
-  let nextPendingDay = currentDay;
-  for (let d = 2; d <= Math.min(currentDay, maxEndorsementDay); d += 1) {
-    if (!endorsedDays.has(d)) {
-      nextPendingDay = d;
-      break;
-    }
-  }
+  // Any Day 2..min(today, maxEndorsementDay) that hasn't been endorsed yet is
+  // eligible — this is what lets a missed day (public holiday / leave /
+  // oversight) be endorsed retrospectively instead of locking the permit.
+  const pendingDays = Array.from(
+    { length: Math.max(0, Math.min(currentDay, maxEndorsementDay) - 1) },
+    (_, i) => i + 2,
+  ).filter((d) => !endorsedDays.has(d));
 
   const applicantName =
     p.display_applicant_name || permit.applicant?.full_name || "—";
@@ -350,7 +346,7 @@ export function PermitDetail({
               <OverrideNotice role={role} stage="II" />
             ) : null}
 
-            <Stage2Form permitId={permit.id} bucket={bucket} photos={photos} />
+            <Stage2Form permitId={permit.id} />
           </>
         ) : (
           <PendingNotice
@@ -407,16 +403,15 @@ export function PermitDetail({
             <EndorsementGrid
               endorsements={endorsements}
               dayRange={maxEndorsementDay}
-              commencement={permit.date_commencement}
             />
 
             {showEndorsementForm ? (
               <EndorsementForm
                 permitId={permit.id}
-                day={nextPendingDay}
+                day={currentDay}
                 maxDay={maxEndorsementDay}
                 existingDays={endorsements.map((e) => e.day_number)}
-                isRetrospective={nextPendingDay < currentDay}
+                pendingDays={pendingDays}
               />
             ) : null}
           </CardBody>
@@ -697,11 +692,9 @@ function OverrideNotice({ role, stage }: { role: string; stage: string }) {
 function EndorsementGrid({
   endorsements,
   dayRange,
-  commencement,
 }: {
   endorsements: PermitEndorsementRow[];
   dayRange: number;
-  commencement?: string;
 }) {
   const days = Array.from(
     { length: Math.min(13, dayRange - 1) },
@@ -709,16 +702,11 @@ function EndorsementGrid({
   );
 
   const map = new Map(endorsements.map((e) => [e.day_number, e]));
-  const start = commencement ? new Date(commencement + "T00:00:00") : null;
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
       {days.map((day) => {
         const endorsement = map.get(day);
-
-        const dueDate = start
-          ? new Date(start.getTime() + (day - 1) * 86400000)
-          : null;
 
         const tone =
           endorsement?.action === "continue"
@@ -742,28 +730,12 @@ function EndorsementGrid({
           >
             <div className="font-semibold text-slate-700">Day {day}</div>
 
-            {dueDate ? (
-              <div className="text-[10px] text-slate-400">
-                Due {formatDate(dueDate.toISOString())}
-              </div>
-            ) : null}
-
             {endorsement ? (
               <>
                 <div className="capitalize mt-1">{endorsement.action}</div>
                 <div className="text-[10px] text-slate-500 mt-1">
-                  Approved: {formatDate(endorsement.ts)}
+                  {formatDate(endorsement.ts)}
                 </div>
-                {endorsement.endorser?.full_name ? (
-                  <div className="text-[10px] text-slate-500">
-                    by {endorsement.endorser.full_name}
-                  </div>
-                ) : null}
-                {endorsement.retrospective ? (
-                  <div className="mt-1 inline-block rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide">
-                    Retrospective
-                  </div>
-                ) : null}
               </>
             ) : (
               <div className="mt-1">Pending</div>

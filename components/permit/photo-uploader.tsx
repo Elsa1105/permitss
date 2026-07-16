@@ -4,7 +4,6 @@ import * as React from "react";
 import { Camera, Image as ImageIcon, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/input";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 import { PhotoAnnotator, type Annotation } from "./photo-annotator";
 import type { PermitPhotoRow } from "@/lib/supabase/types";
@@ -61,26 +60,11 @@ interface Props {
   bucket: string;
   initialPhotos: (PermitPhotoRow & { signedUrl: string })[];
   disabled?: boolean;
-  /** Show a "Photo Comment" field under each photo (e.g. Stage II Not Fit evidence). */
-  showCaptions?: boolean;
-  captionLabel?: string;
-  captionPlaceholder?: string;
 }
 
-export function PhotoUploader({
-  permitId,
-  bucket,
-  initialPhotos,
-  disabled,
-  showCaptions = false,
-  captionLabel = "Photo Comment",
-  captionPlaceholder = "Describe what this photo shows…",
-}: Props) {
+export function PhotoUploader({ permitId, bucket, initialPhotos, disabled }: Props) {
   const [photos, setPhotos] = React.useState(initialPhotos);
   const [uploading, setUploading] = React.useState(false);
-  const [savingCaptionId, setSavingCaptionId] = React.useState<string | null>(
-    null,
-  );
   const [editing, setEditing] = React.useState<{
     id: string;
     url: string;
@@ -134,6 +118,7 @@ export function PhotoUploader({
         ...s,
         { ...(row as PermitPhotoRow), signedUrl: signed?.signedUrl ?? "" },
       ]);
+      setCaptionDrafts((s) => ({ ...s, [photoId]: "" }));
       toast.success("Photo uploaded");
     } finally {
       setUploading(false);
@@ -153,22 +138,33 @@ export function PhotoUploader({
     toast.success("Photo removed");
   }
 
-  async function saveCaption(photoId: string, caption: string) {
-    const supabase = createBrowserSupabase();
+  const [captionDrafts, setCaptionDrafts] = React.useState<Record<string, string>>(
+    () =>
+      Object.fromEntries(
+        initialPhotos.map((p) => [p.id, p.caption ?? ""]),
+      ),
+  );
+  const [savingCaptionId, setSavingCaptionId] = React.useState<string | null>(
+    null,
+  );
+
+  async function saveCaption(photoId: string) {
+    const value = (captionDrafts[photoId] ?? "").trim();
     setSavingCaptionId(photoId);
     try {
+      const supabase = createBrowserSupabase();
       const { error } = await supabase
         .from("permit_photos")
-        .update({ caption: caption.trim() || null })
+        .update({ caption: value || null })
         .eq("id", photoId);
+
       if (error) {
         toast.error(error.message);
         return;
       }
+
       setPhotos((s) =>
-        s.map((p) =>
-          p.id === photoId ? { ...p, caption: caption.trim() || null } : p,
-        ),
+        s.map((p) => (p.id === photoId ? { ...p, caption: value || null } : p)),
       );
       toast.success("Comment saved");
     } finally {
@@ -288,19 +284,35 @@ export function PhotoUploader({
                 ) : null}
               </div>
 
-              {showCaptions ? (
-                <CaptionField
-                  photoId={p.id}
-                  label={captionLabel}
-                  placeholder={captionPlaceholder}
-                  initialValue={p.caption ?? ""}
-                  disabled={disabled}
-                  saving={savingCaptionId === p.id}
-                  onSave={(value) => saveCaption(p.id, value)}
-                />
-              ) : p.caption ? (
-                <p className="text-xs text-slate-600 italic">“{p.caption}”</p>
-              ) : null}
+              {/* Photo comment: lets an assessor explain what the photo shows,
+                  e.g. why an area/employee was marked Not Fit for Work. */}
+              {disabled ? (
+                p.caption ? (
+                  <p className="text-xs text-slate-600 italic px-0.5">
+                    &ldquo;{p.caption}&rdquo;
+                  </p>
+                ) : null
+              ) : (
+                <div className="flex gap-1">
+                  <textarea
+                    value={captionDrafts[p.id] ?? ""}
+                    onChange={(e) =>
+                      setCaptionDrafts((s) => ({ ...s, [p.id]: e.target.value }))
+                    }
+                    placeholder="Comment (e.g. reason not fit for work)…"
+                    rows={2}
+                    className="flex-1 text-xs rounded-md border border-slate-200 px-2 py-1 resize-none focus:outline-none focus:ring-1 focus:ring-slate-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => saveCaption(p.id)}
+                    disabled={savingCaptionId === p.id}
+                    className="text-xs px-2 rounded-md border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Save
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -315,45 +327,5 @@ export function PhotoUploader({
         />
       ) : null}
     </div>
-  );
-}
-
-function CaptionField({
-  photoId,
-  label,
-  placeholder,
-  initialValue,
-  disabled,
-  saving,
-  onSave,
-}: {
-  photoId: string;
-  label: string;
-  placeholder: string;
-  initialValue: string;
-  disabled?: boolean;
-  saving: boolean;
-  onSave: (value: string) => void;
-}) {
-  const [value, setValue] = React.useState(initialValue);
-
-  React.useEffect(() => {
-    setValue(initialValue);
-  }, [initialValue]);
-
-  return (
-    <Textarea
-      label={label}
-      value={value}
-      placeholder={placeholder}
-      disabled={disabled}
-      rows={2}
-      className="text-xs"
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={() => {
-        if (value.trim() !== (initialValue ?? "").trim()) onSave(value);
-      }}
-      hint={saving ? "Saving comment…" : undefined}
-    />
   );
 }
