@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
+import { PhotoUploader } from "./photo-uploader";
 import { cn } from "@/lib/utils";
+import type { PermitPhotoRow } from "@/lib/supabase/types";
 
 type ChecklistKey =
   | "isolation_checked"
@@ -58,7 +60,15 @@ const INITIAL_CHECKLIST: ChecklistState = {
   evidence_reviewed: "unset",
 };
 
-export function Stage2Form({ permitId }: { permitId: string }) {
+export function Stage2Form({
+  permitId,
+  bucket,
+  photos = [],
+}: {
+  permitId: string;
+  bucket?: string;
+  photos?: (PermitPhotoRow & { signedUrl: string })[];
+}) {
   const router = useRouter();
 
   const [fit, setFit] = React.useState<boolean | null>(null);
@@ -293,6 +303,27 @@ export function Stage2Form({ permitId }: { permitId: string }) {
           Not Fit for Hot Work
         </button>
       </div>
+
+      {fit === false && bucket ? (
+        <div className="rounded-lg border border-red-200 bg-red-50/50 p-4 space-y-2">
+          <h4 className="text-sm font-semibold text-slate-900">
+            Photo Evidence &amp; Comment
+          </h4>
+          <p className="text-xs text-slate-600">
+            Attach a photo of the condition and add a comment explaining why
+            it is Not Fit for hot work. This is recorded on the permit and
+            included in the audit trail.
+          </p>
+          <PhotoUploader
+            permitId={permitId}
+            bucket={bucket}
+            initialPhotos={photos}
+            showCaptions
+            captionLabel="Photo Comment"
+            captionPlaceholder="What is wrong in this photo?"
+          />
+        </div>
+      ) : null}
 
       <Textarea
         label={

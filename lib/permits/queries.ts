@@ -95,7 +95,7 @@ export async function getEndorsements(
 
   const { data, error } = await supabase
     .from("permit_endorsements")
-    .select("*")
+    .select("*, endorser:endorser_id ( full_name )")
     .eq("permit_id", permitId)
     .order("day_number", { ascending: true });
 
@@ -103,7 +103,7 @@ export async function getEndorsements(
     throw error;
   }
 
-  return (data ?? []) as PermitEndorsementRow[];
+  return (data ?? []) as unknown as PermitEndorsementRow[];
 }
 
 export async function getPhotos(permitId: string): Promise<PermitPhotoRow[]> {
@@ -112,7 +112,7 @@ export async function getPhotos(permitId: string): Promise<PermitPhotoRow[]> {
   const { data, error } = await supabase
     .from("permit_photos")
     .select(
-      "id, permit_id, storage_path, annotation_data, uploaded_by, uploaded_at",
+      "id, permit_id, storage_path, annotation_data, uploaded_by, uploaded_at, caption",
     )
     .eq("permit_id", permitId)
     .order("uploaded_at", { ascending: true });

@@ -11,9 +11,16 @@ interface Props {
   day: number;
   maxDay: number;
   existingDays: number[];
+  isRetrospective?: boolean;
 }
 
-export function EndorsementForm({ permitId, day, maxDay, existingDays }: Props) {
+export function EndorsementForm({
+  permitId,
+  day,
+  maxDay,
+  existingDays,
+  isRetrospective = false,
+}: Props) {
   const router = useRouter();
 
   const validToday =
@@ -32,7 +39,9 @@ export function EndorsementForm({ permitId, day, maxDay, existingDays }: Props) 
     ? [
         {
           value: String(day),
-          label: `Day ${day}`,
+          label: isRetrospective
+            ? `Day ${day} (overdue — retrospective)`
+            : `Day ${day}`,
         },
       ]
     : [
@@ -40,7 +49,7 @@ export function EndorsementForm({ permitId, day, maxDay, existingDays }: Props) 
           value: String(day),
           label: existingDays.includes(day)
             ? `Day ${day} already endorsed`
-            : `Day ${day} not available today`,
+            : `Day ${day} not available`,
         },
       ];
 
@@ -117,12 +126,20 @@ export function EndorsementForm({ permitId, day, maxDay, existingDays }: Props) 
 
         {!validToday ? (
           <p className="mt-1 text-xs text-amber-700">
-            Daily endorsement is only available on the correct permit day and
-            cannot be submitted early, late, duplicated, or out of sequence.
+            No endorsement is due right now — every day up to today has
+            already been endorsed, or this permit is outside its active
+            window.
+          </p>
+        ) : isRetrospective ? (
+          <p className="mt-1 text-xs text-amber-700">
+            Day {day} was missed (public holiday, leave, or oversight) and is
+            now overdue. Submit it as a retrospective endorsement before any
+            later day can be endorsed.
           </p>
         ) : (
           <p className="mt-1 text-xs text-slate-500">
-            Only today&apos;s permit day can be endorsed. Any authorised SRM / Project Manager for this site may submit the endorsement for leave coverage.
+            Today&apos;s permit day. Any authorised SRM / Project Manager for
+            this site may submit the endorsement for leave coverage.
           </p>
         )}
       </div>
