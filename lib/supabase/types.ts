@@ -150,6 +150,12 @@ export interface PermitEndorsementRow {
   action: EndorsementAction;
   remarks: string | null;
   ts: string;
+  /** Scheduled day this endorsement was due (date_commencement + day_number - 1). */
+  target_date?: string | null;
+  /** True when submitted after target_date — a missed day caught up late. */
+  retrospective?: boolean;
+  /** Joined for read-only / public display only. Not present on every query. */
+  endorser?: { full_name: string } | null;
 }
 
 export interface PermitPhotoRow {
@@ -159,6 +165,8 @@ export interface PermitPhotoRow {
   annotation_data: Record<string, unknown> | null;
   uploaded_by: string;
   uploaded_at: string;
+  /** Optional written comment from the uploader (e.g. why marked Not Fit). */
+  caption?: string | null;
 }
 
 export interface PermitDocumentRow {

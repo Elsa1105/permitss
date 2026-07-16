@@ -4,6 +4,7 @@ import * as React from "react";
 import { Camera, Image as ImageIcon, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/input";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 import { PhotoAnnotator, type Annotation } from "./photo-annotator";
 import type { PermitPhotoRow } from "@/lib/supabase/types";
@@ -60,11 +61,26 @@ interface Props {
   bucket: string;
   initialPhotos: (PermitPhotoRow & { signedUrl: string })[];
   disabled?: boolean;
+  /** Show a "Photo Comment" field under each photo (e.g. Stage II Not Fit evidence). */
+  showCaptions?: boolean;
+  captionLabel?: string;
+  captionPlaceholder?: string;
 }
 
-export function PhotoUploader({ permitId, bucket, initialPhotos, disabled }: Props) {
+export function PhotoUploader({
+  permitId,
+  bucket,
+  initialPhotos,
+  disabled,
+  showCaptions = false,
+  captionLabel = "Photo Comment",
+  captionPlaceholder = "Describe what this photo shows…",
+}: Props) {
   const [photos, setPhotos] = React.useState(initialPhotos);
   const [uploading, setUploading] = React.useState(false);
+  const [savingCaptionId, setSavingCaptionId] = React.useState<string | null>(
+    null,
+  );
   const [editing, setEditing] = React.useState<{
     id: string;
     url: string;
@@ -137,6 +153,29 @@ export function PhotoUploader({ permitId, bucket, initialPhotos, disabled }: Pro
     toast.success("Photo removed");
   }
 
+  async function saveCaption(photoId: string, caption: string) {
+    const supabase = createBrowserSupabase();
+    setSavingCaptionId(photoId);
+    try {
+      const { error } = await supabase
+        .from("permit_photos")
+        .update({ caption: caption.trim() || null })
+        .eq("id", photoId);
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      setPhotos((s) =>
+        s.map((p) =>
+          p.id === photoId ? { ...p, caption: caption.trim() || null } : p,
+        ),
+      );
+      toast.success("Comment saved");
+    } finally {
+      setSavingCaptionId(null);
+    }
+  }
+
   async function saveAnnotation(annotations: Annotation[]) {
     if (!editing) return;
     const supabase = createBrowserSupabase();
@@ -205,49 +244,62 @@ export function PhotoUploader({ permitId, bucket, initialPhotos, disabled }: Pro
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {photos.map((p) => (
-            <div
-              key={p.id}
-              className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-100 aspect-video"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={p.signedUrl}
-                alt="Permit photo"
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-              {!disabled ? (
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end justify-end p-2 gap-2 opacity-0 group-hover:opacity-100">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEditing({
-                        id: p.id,
-                        url: p.signedUrl,
-                        annotation:
-                          ((p.annotation_data as { annotations?: Annotation[] } | null)
-                            ?.annotations ?? []) as Annotation[],
-                      })
-                    }
-                    className="p-2 rounded-md bg-white/90 hover:bg-white"
-                    aria-label="Annotate"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deletePhoto(p)}
-                    className="p-2 rounded-md bg-white/90 hover:bg-white text-red-600"
-                    aria-label="Delete"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ) : null}
-              {(p.annotation_data as { annotations?: Annotation[] } | null)?.annotations
-                ?.length ? (
-                <div className="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">
-                  Annotated
-                </div>
+            <div key={p.id} className="space-y-1.5">
+              <div className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-100 aspect-video">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={p.signedUrl}
+                  alt="Permit photo"
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+                {!disabled ? (
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end justify-end p-2 gap-2 opacity-0 group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditing({
+                          id: p.id,
+                          url: p.signedUrl,
+                          annotation:
+                            ((p.annotation_data as { annotations?: Annotation[] } | null)
+                              ?.annotations ?? []) as Annotation[],
+                        })
+                      }
+                      className="p-2 rounded-md bg-white/90 hover:bg-white"
+                      aria-label="Annotate"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deletePhoto(p)}
+                      className="p-2 rounded-md bg-white/90 hover:bg-white text-red-600"
+                      aria-label="Delete"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : null}
+                {(p.annotation_data as { annotations?: Annotation[] } | null)?.annotations
+                  ?.length ? (
+                  <div className="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">
+                    Annotated
+                  </div>
+                ) : null}
+              </div>
+
+              {showCaptions ? (
+                <CaptionField
+                  photoId={p.id}
+                  label={captionLabel}
+                  placeholder={captionPlaceholder}
+                  initialValue={p.caption ?? ""}
+                  disabled={disabled}
+                  saving={savingCaptionId === p.id}
+                  onSave={(value) => saveCaption(p.id, value)}
+                />
+              ) : p.caption ? (
+                <p className="text-xs text-slate-600 italic">“{p.caption}”</p>
               ) : null}
             </div>
           ))}
@@ -263,5 +315,45 @@ export function PhotoUploader({ permitId, bucket, initialPhotos, disabled }: Pro
         />
       ) : null}
     </div>
+  );
+}
+
+function CaptionField({
+  photoId,
+  label,
+  placeholder,
+  initialValue,
+  disabled,
+  saving,
+  onSave,
+}: {
+  photoId: string;
+  label: string;
+  placeholder: string;
+  initialValue: string;
+  disabled?: boolean;
+  saving: boolean;
+  onSave: (value: string) => void;
+}) {
+  const [value, setValue] = React.useState(initialValue);
+
+  React.useEffect(() => {
+    setValue(initialValue);
+  }, [initialValue]);
+
+  return (
+    <Textarea
+      label={label}
+      value={value}
+      placeholder={placeholder}
+      disabled={disabled}
+      rows={2}
+      className="text-xs"
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => {
+        if (value.trim() !== (initialValue ?? "").trim()) onSave(value);
+      }}
+      hint={saving ? "Saving comment…" : undefined}
+    />
   );
 }
