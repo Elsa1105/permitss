@@ -167,7 +167,57 @@ export function PermitTable({
         </div>
       ) : null}
 
-      <div className="overflow-x-auto">
+      {/* Mobile / narrow screens: card list, no horizontal scrolling needed */}
+      <div className="divide-y divide-slate-200 lg:hidden">
+        {visiblePermits.length === 0 ? (
+          <p className="py-8 text-center text-sm text-slate-500">
+            No permits match your search.
+          </p>
+        ) : (
+          visiblePermits.map(({ permit: p, companySite, applicant }) => (
+            <Link
+              key={p.id}
+              href={`/permits/${p.id}`}
+              className="flex items-start justify-between gap-3 px-3 py-3 hover:bg-slate-50/60"
+            >
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-xs text-slate-700">
+                    {p.serial_no}
+                  </span>
+                  <PermitStatusBadge state={p.state} />
+                </div>
+
+                <div className="font-medium text-slate-900">
+                  {p.vessel_project || "—"}
+                </div>
+
+                <div className="text-xs text-slate-500">
+                  {companySite}
+                  {p.location_of_work ? ` · ${p.location_of_work}` : ""}
+                </div>
+
+                <div className="text-xs text-slate-500">
+                  {applicant}
+                  {p.job_type ? ` · ${p.job_type}` : ""}
+                </div>
+
+                <div className="text-xs text-slate-400">
+                  {formatDate(p.date_commencement)} →{" "}
+                  {formatDate(p.date_completion)}
+                </div>
+              </div>
+
+              <ChevronRight className="mt-1 h-4 w-4 flex-shrink-0 text-slate-400" />
+            </Link>
+          ))
+        )}
+      </div>
+
+      {/* Desktop / wide screens: full sortable table, low-priority columns
+          progressively hidden below xl so it fits without side-scrolling
+          on typical laptop widths. */}
+      <div className="hidden overflow-x-auto lg:block">
         <table className="table-base">
           <thead>
             <tr>
@@ -182,12 +232,14 @@ export function PermitTable({
                 sortKey="job_type"
                 sort={sort}
                 onSort={toggleSort}
+                className="hidden xl:table-cell"
               />
               <SortableHeader
                 label="Company / Site"
                 sortKey="company_site"
                 sort={sort}
                 onSort={toggleSort}
+                className="hidden xl:table-cell"
               />
               <SortableHeader
                 label="Vessel / Project"
@@ -200,12 +252,14 @@ export function PermitTable({
                 sortKey="location_of_work"
                 sort={sort}
                 onSort={toggleSort}
+                className="hidden 2xl:table-cell"
               />
               <SortableHeader
                 label="Applicant Name"
                 sortKey="applicant"
                 sort={sort}
                 onSort={toggleSort}
+                className="hidden 2xl:table-cell"
               />
               <SortableHeader
                 label="Dates"
@@ -237,19 +291,21 @@ export function PermitTable({
                     {p.serial_no}
                   </td>
 
-                  <td className="font-medium whitespace-nowrap">
+                  <td className="hidden font-medium whitespace-nowrap xl:table-cell">
                     {p.job_type || "—"}
                   </td>
 
-                  <td className="text-xs text-slate-600 whitespace-nowrap">
+                  <td className="hidden text-xs text-slate-600 whitespace-nowrap xl:table-cell">
                     {companySite}
                   </td>
 
                   <td className="font-medium">{p.vessel_project}</td>
 
-                  <td className="text-slate-600">{p.location_of_work}</td>
+                  <td className="hidden text-slate-600 2xl:table-cell">
+                    {p.location_of_work}
+                  </td>
 
-                  <td className="text-slate-600">
+                  <td className="hidden text-slate-600 2xl:table-cell">
                     <div>{applicant}</div>
                     {p.display_applicant_department ? (
                       <div className="text-xs text-slate-400">
@@ -290,11 +346,13 @@ function SortableHeader({
   sortKey,
   sort,
   onSort,
+  className,
 }: {
   label: string;
   sortKey: SortKey;
   sort: SortState;
   onSort: (key: SortKey) => void;
+  className?: string;
 }) {
   const active = sort?.key === sortKey;
   const ariaSort = !active
@@ -304,7 +362,7 @@ function SortableHeader({
       : "descending";
 
   return (
-    <th aria-sort={ariaSort}>
+    <th aria-sort={ariaSort} className={className}>
       <button
         type="button"
         onClick={() => onSort(sortKey)}
