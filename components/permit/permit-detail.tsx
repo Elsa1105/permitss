@@ -164,6 +164,20 @@ export function PermitDetail({
     p.other_hazard_text ?? null,
   );
 
+  // Day picker state: which day the SRM is about to endorse. Defaults to
+  // today's day (or the earliest missed day) and stays in sync whenever the
+  // set of pending days changes (e.g. right after a submission clears one).
+  const [selectedDay, setSelectedDay] = React.useState<number>(
+    pendingDays[0] ?? currentDay,
+  );
+
+  React.useEffect(() => {
+    if (pendingDays.length > 0 && !pendingDays.includes(selectedDay)) {
+      setSelectedDay(pendingDays[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDays.join(",")]);
+
   return (
     <div className="space-y-6">
       <Card>
@@ -403,15 +417,19 @@ export function PermitDetail({
             <EndorsementGrid
               endorsements={endorsements}
               dayRange={maxEndorsementDay}
+              pendingDays={pendingDays}
+              selectedDay={selectedDay}
+              onSelectDay={setSelectedDay}
             />
 
             {showEndorsementForm ? (
               <EndorsementForm
                 permitId={permit.id}
-                day={currentDay}
                 maxDay={maxEndorsementDay}
                 existingDays={endorsements.map((e) => e.day_number)}
                 pendingDays={pendingDays}
+                selectedDay={selectedDay}
+                onSelectDay={setSelectedDay}
               />
             ) : null}
           </CardBody>
@@ -692,9 +710,15 @@ function OverrideNotice({ role, stage }: { role: string; stage: string }) {
 function EndorsementGrid({
   endorsements,
   dayRange,
+  pendingDays,
+  selectedDay,
+  onSelectDay,
 }: {
   endorsements: PermitEndorsementRow[];
   dayRange: number;
+  pendingDays?: number[];
+  selectedDay?: number;
+  onSelectDay?: (day: number) => void;
 }) {
   const days = Array.from(
     { length: Math.min(13, dayRange - 1) },
@@ -702,33 +726,35 @@ function EndorsementGrid({
   );
 
   const map = new Map(endorsements.map((e) => [e.day_number, e]));
+  const pendingSet = new Set(pendingDays ?? []);
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
       {days.map((day) => {
         const endorsement = map.get(day);
+        const isPending = pendingSet.has(day);
+        const isSelected = isPending && selectedDay === day;
 
-        const tone =
-          endorsement?.action === "continue"
-            ? "ok"
-            : endorsement?.action === "reject" ||
-                endorsement?.action === "revoke"
-              ? "bad"
-              : "neutral";
+        const toneClasses = endorsement
+          ? endorsement.action === "continue"
+            ? "bg-emerald-50 border-emerald-200"
+            : "bg-red-50 border-red-200"
+          : isSelected
+            ? "bg-blue-600 border-blue-600 text-white shadow-sm"
+            : isPending
+              ? "bg-amber-50 border-amber-300 text-amber-800 hover:border-amber-400 hover:bg-amber-100"
+              : "bg-slate-50 border-slate-200 text-slate-400";
 
-        return (
-          <div
-            key={day}
-            className={
-              "rounded-md border p-3 text-center text-xs " +
-              (endorsement
-                ? tone === "ok"
-                  ? "bg-emerald-50 border-emerald-200"
-                  : "bg-red-50 border-red-200"
-                : "bg-slate-50 border-slate-200 text-slate-400")
-            }
-          >
-            <div className="font-semibold text-slate-700">Day {day}</div>
+        const inner = (
+          <>
+            <div
+              className={
+                "font-semibold " +
+                (isSelected ? "text-white" : "text-slate-700")
+              }
+            >
+              Day {day}
+            </div>
 
             {endorsement ? (
               <>
@@ -737,9 +763,40 @@ function EndorsementGrid({
                   {formatDate(endorsement.ts)}
                 </div>
               </>
+            ) : isPending ? (
+              <div className="mt-1">
+                {isSelected ? "Selected" : "Click to endorse"}
+              </div>
             ) : (
               <div className="mt-1">Pending</div>
             )}
+          </>
+        );
+
+        // Pending days become clickable buttons — this is the day picker.
+        // Already-endorsed and not-yet-available days stay as static cards.
+        if (isPending && onSelectDay) {
+          return (
+            <button
+              key={day}
+              type="button"
+              onClick={() => onSelectDay(day)}
+              className={
+                "w-full rounded-md border p-3 text-center text-xs transition cursor-pointer " +
+                toneClasses
+              }
+            >
+              {inner}
+            </button>
+          );
+        }
+
+        return (
+          <div
+            key={day}
+            className={"rounded-md border p-3 text-center text-xs " + toneClasses}
+          >
+            {inner}
           </div>
         );
       })}
