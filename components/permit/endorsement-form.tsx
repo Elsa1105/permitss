@@ -47,20 +47,6 @@ export function EndorsementForm({
   const [remarks, setRemarks] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
 
-  const dayOptions = hasAvailableDay
-    ? availableDays.map((d) => ({
-        value: String(d),
-        label: d === day ? `Day ${d} (today)` : `Day ${d} — missed, catch up`,
-      }))
-    : [
-        {
-          value: String(day),
-          label: existingDays.includes(day)
-            ? `Day ${day} already endorsed`
-            : `Day ${day} not available yet`,
-        },
-      ];
-
   const canSubmitToday = hasAvailableDay;
 
   async function onSubmit(e: React.FormEvent) {
@@ -147,16 +133,80 @@ export function EndorsementForm({
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Select
-          label="Day"
-          required
-          value={String(chosenDay)}
-          onChange={(e) => setChosenDay(Number(e.target.value))}
-          options={dayOptions}
-          disabled={!hasAvailableDay}
-        />
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1.5">
+          Day
+        </label>
 
+        {/* Clickable day chips instead of a dropdown — SRM taps the day
+            they want to endorse directly. Days already endorsed are shown
+            greyed out and disabled; the current day and any missed days
+            available for retrospective catch-up are clickable. */}
+        <div className="flex flex-wrap gap-2">
+          {Array.from(
+            { length: Math.min(maxDay, 14) - 1 },
+            (_, i) => i + 2,
+          ).map((d) => {
+            const isEndorsed = existingDays.includes(d);
+            const isAvailable = availableDays.includes(d);
+            const isSelected = chosenDay === d && isAvailable;
+            const isToday = d === day;
+            const isMissed = isAvailable && !isToday;
+
+            return (
+              <button
+                key={d}
+                type="button"
+                disabled={!isAvailable}
+                onClick={() => isAvailable && setChosenDay(d)}
+                title={
+                  isEndorsed
+                    ? `Day ${d} already endorsed`
+                    : isAvailable
+                      ? isToday
+                        ? `Day ${d} (today)`
+                        : `Day ${d} — missed, click to catch up`
+                      : `Day ${d} not available yet`
+                }
+                className={`min-w-[64px] rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                  isSelected
+                    ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                    : isEndorsed
+                      ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                      : isMissed
+                        ? "border-amber-300 bg-amber-50 text-amber-800 hover:border-amber-400 hover:bg-amber-100"
+                        : isAvailable
+                          ? "border-slate-300 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50"
+                          : "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-300"
+                }`}
+              >
+                Day {d}
+                {isEndorsed ? (
+                  <span className="ml-1">✓</span>
+                ) : isMissed ? (
+                  <span className="ml-1">⏳</span>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2.5 w-2.5 rounded-full bg-blue-600" /> Selected
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2.5 w-2.5 rounded-full bg-amber-100 border border-amber-300" />{" "}
+            Missed — click to catch up
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2.5 w-2.5 rounded-full bg-slate-100 border border-slate-200" />{" "}
+            Already endorsed
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3">
         <Select
           label="Action"
           required
