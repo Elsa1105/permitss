@@ -167,220 +167,125 @@ export function PermitTable({
         </div>
       ) : null}
 
-      {/* Mobile / narrow screens: card list, no horizontal scrolling needed */}
-      <div className="divide-y divide-slate-200 lg:hidden">
+      {/*
+        SINGLE LAYOUT FOR ALL SCREEN SIZES — this is a row list, not a wide
+        <table>. It never needs horizontal scrolling because it never lays
+        columns out side by side beyond what fits: only 3 fixed columns
+        (identity block, dates, status/action), and the identity block
+        wraps everything else (serial no, job type, company/site, vessel,
+        location, applicant) as stacked text inside itself.
+      */}
+      <div className="border-t border-slate-200">
+        {/* Sort bar - compact, wraps on small screens instead of forcing scroll */}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 border-b border-slate-200 bg-slate-50/70 px-3 py-2 text-xs">
+          <SortChip label="Serial" sortKey="serial_no" sort={sort} onSort={toggleSort} />
+          <SortChip label="Job Type" sortKey="job_type" sort={sort} onSort={toggleSort} />
+          <SortChip label="Company/Site" sortKey="company_site" sort={sort} onSort={toggleSort} />
+          <SortChip label="Vessel/Project" sortKey="vessel_project" sort={sort} onSort={toggleSort} />
+          <SortChip label="Location" sortKey="location_of_work" sort={sort} onSort={toggleSort} />
+          <SortChip label="Applicant" sortKey="applicant" sort={sort} onSort={toggleSort} />
+          <SortChip label="Dates" sortKey="date_commencement" sort={sort} onSort={toggleSort} />
+          <SortChip label="Status" sortKey="state" sort={sort} onSort={toggleSort} />
+        </div>
+
         {visiblePermits.length === 0 ? (
           <p className="py-8 text-center text-sm text-slate-500">
             No permits match your search.
           </p>
         ) : (
-          visiblePermits.map(({ permit: p, companySite, applicant }) => (
-            <Link
-              key={p.id}
-              href={`/permits/${p.id}`}
-              className="flex items-start justify-between gap-3 px-3 py-3 hover:bg-slate-50/60"
-            >
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-xs text-slate-700">
-                    {p.serial_no}
-                  </span>
-                  <PermitStatusBadge state={p.state} />
+          <div className="divide-y divide-slate-200">
+            {visiblePermits.map(({ permit: p, companySite, applicant }) => (
+              <Link
+                key={p.id}
+                href={`/permits/${p.id}`}
+                className="grid grid-cols-1 gap-2 px-3 py-3 hover:bg-slate-50/60 sm:grid-cols-[1fr_auto_auto_auto] sm:items-center sm:gap-4"
+              >
+                {/* Identity block: everything that used to be 6 separate
+                    columns now stacks here, so it never pushes the row
+                    wider than the container. */}
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="font-mono text-xs text-slate-500">
+                      {p.serial_no}
+                    </span>
+                    {p.job_type ? (
+                      <span className="text-xs text-slate-400">
+                        · {p.job_type}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="truncate font-medium text-slate-900">
+                    {p.vessel_project || "—"}
+                  </div>
+
+                  <div className="truncate text-xs text-slate-500">
+                    {companySite}
+                    {p.location_of_work ? ` · ${p.location_of_work}` : ""}
+                  </div>
+
+                  <div className="truncate text-xs text-slate-500">
+                    {applicant}
+                    {p.display_applicant_department
+                      ? ` · ${p.display_applicant_department}`
+                      : ""}
+                  </div>
                 </div>
 
-                <div className="font-medium text-slate-900">
-                  {p.vessel_project || "—"}
-                </div>
-
-                <div className="text-xs text-slate-500">
-                  {companySite}
-                  {p.location_of_work ? ` · ${p.location_of_work}` : ""}
-                </div>
-
-                <div className="text-xs text-slate-500">
-                  {applicant}
-                  {p.job_type ? ` · ${p.job_type}` : ""}
-                </div>
-
-                <div className="text-xs text-slate-400">
+                <div className="text-xs text-slate-500 sm:whitespace-nowrap sm:text-right">
                   {formatDate(p.date_commencement)} →{" "}
                   {formatDate(p.date_completion)}
                 </div>
-              </div>
 
-              <ChevronRight className="mt-1 h-4 w-4 flex-shrink-0 text-slate-400" />
-            </Link>
-          ))
+                <div className="sm:justify-self-start">
+                  <PermitStatusBadge state={p.state} />
+                </div>
+
+                <div className="flex items-center justify-end gap-1 text-sm font-medium text-blue-600">
+                  Open <ChevronRight className="h-4 w-4" />
+                </div>
+              </Link>
+            ))}
+          </div>
         )}
-      </div>
-
-      {/* Desktop / wide screens: full sortable table, low-priority columns
-          progressively hidden below xl so it fits without side-scrolling
-          on typical laptop widths. */}
-      <div className="hidden overflow-x-auto lg:block">
-        <table className="table-base">
-          <thead>
-            <tr>
-              <SortableHeader
-                label="Serial No."
-                sortKey="serial_no"
-                sort={sort}
-                onSort={toggleSort}
-              />
-              <SortableHeader
-                label="Job Type"
-                sortKey="job_type"
-                sort={sort}
-                onSort={toggleSort}
-                className="hidden xl:table-cell"
-              />
-              <SortableHeader
-                label="Company / Site"
-                sortKey="company_site"
-                sort={sort}
-                onSort={toggleSort}
-                className="hidden xl:table-cell"
-              />
-              <SortableHeader
-                label="Vessel / Project"
-                sortKey="vessel_project"
-                sort={sort}
-                onSort={toggleSort}
-              />
-              <SortableHeader
-                label="Location"
-                sortKey="location_of_work"
-                sort={sort}
-                onSort={toggleSort}
-                className="hidden 2xl:table-cell"
-              />
-              <SortableHeader
-                label="Applicant Name"
-                sortKey="applicant"
-                sort={sort}
-                onSort={toggleSort}
-                className="hidden 2xl:table-cell"
-              />
-              <SortableHeader
-                label="Dates"
-                sortKey="date_commencement"
-                sort={sort}
-                onSort={toggleSort}
-              />
-              <SortableHeader
-                label="Status"
-                sortKey="state"
-                sort={sort}
-                onSort={toggleSort}
-              />
-              <th aria-label="Actions" />
-            </tr>
-          </thead>
-
-          <tbody>
-            {visiblePermits.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="py-8 text-center text-slate-500">
-                  No permits match your search.
-                </td>
-              </tr>
-            ) : (
-              visiblePermits.map(({ permit: p, companySite, applicant }) => (
-                <tr key={p.id} className="hover:bg-slate-50/60">
-                  <td className="font-mono text-xs text-slate-700">
-                    {p.serial_no}
-                  </td>
-
-                  <td className="hidden font-medium whitespace-nowrap xl:table-cell">
-                    {p.job_type || "—"}
-                  </td>
-
-                  <td className="hidden text-xs text-slate-600 whitespace-nowrap xl:table-cell">
-                    {companySite}
-                  </td>
-
-                  <td className="font-medium">{p.vessel_project}</td>
-
-                  <td className="hidden text-slate-600 2xl:table-cell">
-                    {p.location_of_work}
-                  </td>
-
-                  <td className="hidden text-slate-600 2xl:table-cell">
-                    <div>{applicant}</div>
-                    {p.display_applicant_department ? (
-                      <div className="text-xs text-slate-400">
-                        {p.display_applicant_department}
-                      </div>
-                    ) : null}
-                  </td>
-
-                  <td className="text-xs text-slate-500 whitespace-nowrap">
-                    {formatDate(p.date_commencement)} →{" "}
-                    {formatDate(p.date_completion)}
-                  </td>
-
-                  <td>
-                    <PermitStatusBadge state={p.state} />
-                  </td>
-
-                  <td className="text-right">
-                    <Link
-                      href={`/permits/${p.id}`}
-                      className="inline-flex items-center text-blue-600 hover:underline text-sm"
-                    >
-                      Open <ChevronRight className="h-4 w-4" />
-                    </Link>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
       </div>
     </div>
   );
 }
 
-function SortableHeader({
+function SortChip({
   label,
   sortKey,
   sort,
   onSort,
-  className,
 }: {
   label: string;
   sortKey: SortKey;
   sort: SortState;
   onSort: (key: SortKey) => void;
-  className?: string;
 }) {
   const active = sort?.key === sortKey;
-  const ariaSort = !active
-    ? "none"
-    : sort.direction === "asc"
-      ? "ascending"
-      : "descending";
 
   return (
-    <th aria-sort={ariaSort} className={className}>
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className="inline-flex items-center gap-1.5 whitespace-nowrap text-left hover:text-slate-950"
-        title={`Sort by ${label}`}
-      >
-        {label}
-        {active ? (
-          sort.direction === "asc" ? (
-            <ArrowUp className="h-3.5 w-3.5" />
-          ) : (
-            <ArrowDown className="h-3.5 w-3.5" />
-          )
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:text-slate-950 ${
+        active ? "font-semibold text-slate-950" : "text-slate-500"
+      }`}
+      title={`Sort by ${label}`}
+    >
+      {label}
+      {active ? (
+        sort!.direction === "asc" ? (
+          <ArrowUp className="h-3 w-3" />
         ) : (
-          <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
-        )}
-      </button>
-    </th>
+          <ArrowDown className="h-3 w-3" />
+        )
+      ) : (
+        <ArrowUpDown className="h-3 w-3 text-slate-300" />
+      )}
+    </button>
   );
 }
 
