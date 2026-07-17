@@ -1,4 +1,5 @@
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabase } from "@/lib/supabase/server";
 import type {
   PermitDocumentRow,
@@ -54,8 +55,11 @@ export async function listPermits(opts?: {
   return (data ?? []) as unknown as PermitWithJoins[];
 }
 
-export async function getPermit(id: string): Promise<PermitWithJoins | null> {
-  const supabase = await createServerSupabase();
+export async function getPermit(
+  id: string,
+  client?: SupabaseClient,
+): Promise<PermitWithJoins | null> {
+  const supabase = client ?? (await createServerSupabase());
 
   const { data, error } = await supabase
     .from("permits")
@@ -72,8 +76,9 @@ export async function getPermit(id: string): Promise<PermitWithJoins | null> {
 
 export async function getPermitStages(
   permitId: string,
+  client?: SupabaseClient,
 ): Promise<PermitStageRow[]> {
-  const supabase = await createServerSupabase();
+  const supabase = client ?? (await createServerSupabase());
 
   const { data, error } = await supabase
     .from("permit_stages")
@@ -90,8 +95,9 @@ export async function getPermitStages(
 
 export async function getEndorsements(
   permitId: string,
+  client?: SupabaseClient,
 ): Promise<PermitEndorsementRow[]> {
-  const supabase = await createServerSupabase();
+  const supabase = client ?? (await createServerSupabase());
 
   const { data, error } = await supabase
     .from("permit_endorsements")
@@ -106,8 +112,11 @@ export async function getEndorsements(
   return (data ?? []) as PermitEndorsementRow[];
 }
 
-export async function getPhotos(permitId: string): Promise<PermitPhotoRow[]> {
-  const supabase = await createServerSupabase();
+export async function getPhotos(
+  permitId: string,
+  client?: SupabaseClient,
+): Promise<PermitPhotoRow[]> {
+  const supabase = client ?? (await createServerSupabase());
 
   const { data, error } = await supabase
     .from("permit_photos")
@@ -126,8 +135,9 @@ export async function getPhotos(permitId: string): Promise<PermitPhotoRow[]> {
 
 export async function getPermitDocuments(
   permitId: string,
+  client?: SupabaseClient,
 ): Promise<PermitDocumentRow[]> {
-  const supabase = await createServerSupabase();
+  const supabase = client ?? (await createServerSupabase());
 
   const { data, error } = await supabase
     .from("permit_documents")

@@ -63,6 +63,8 @@ export function Stage2Form({ permitId }: { permitId: string }) {
 
   const [fit, setFit] = React.useState<boolean | null>(null);
   const [remarks, setRemarks] = React.useState("");
+  const [correctiveAction, setCorrectiveAction] = React.useState("");
+  const [rectificationDate, setRectificationDate] = React.useState("");
   const [checklist, setChecklist] =
     React.useState<ChecklistState>(INITIAL_CHECKLIST);
   const [submitting, setSubmitting] = React.useState(false);
@@ -150,6 +152,16 @@ export function Stage2Form({ permitId }: { permitId: string }) {
       return;
     }
 
+    if (fit === false && correctiveAction.trim().length === 0) {
+      setError("Corrective action required is mandatory when marking Not Fit.");
+      return;
+    }
+
+    if (fit === false && rectificationDate.trim().length === 0) {
+      setError("Expected rectification date is mandatory when marking Not Fit.");
+      return;
+    }
+
     const naSummary = buildNaSummary();
 
     const remarksWithNa =
@@ -168,6 +180,8 @@ export function Stage2Form({ permitId }: { permitId: string }) {
           fit,
           remarks: remarksWithNa,
           checklist: checklistForCurrentBackend(),
+          corrective_action: fit === false ? correctiveAction.trim() : null,
+          rectification_date: fit === false ? rectificationDate : null,
 
           // Future-ready payload for the later schema/RPC update.
           checklist_status: checklistStatusPayload(),
@@ -309,6 +323,40 @@ export function Stage2Form({ permitId }: { permitId: string }) {
               : "Any additional notes…"
         }
       />
+
+      {fit === false ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-3">
+          <h4 className="text-sm font-semibold text-red-800">
+            Not Fit for Work — additional details
+          </h4>
+
+          <p className="text-xs text-red-700">
+            Attach photo evidence and a comment above in the Photos section,
+            then complete the fields below.
+          </p>
+
+          <Textarea
+            label="Corrective Action Required"
+            required
+            value={correctiveAction}
+            onChange={(e) => setCorrectiveAction(e.target.value)}
+            placeholder="What must be corrected before the location/work can be reassessed?"
+          />
+
+          <div>
+            <label className="block text-sm font-medium text-slate-900 mb-1">
+              Expected Rectification Date
+            </label>
+            <input
+              type="date"
+              required
+              value={rectificationDate}
+              onChange={(e) => setRectificationDate(e.target.value)}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+      ) : null}
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
