@@ -19,7 +19,11 @@ export interface PdfBundle {
   permit: PermitWithJoins;
   stages: PermitStageRow[];
   endorsements: PermitEndorsementRow[];
-  photos: (PermitPhotoRow & { bytes?: Uint8Array; mime?: string })[];
+  photos: (PermitPhotoRow & {
+    bytes?: Uint8Array;
+    mime?: string;
+    uploaderName?: string | null;
+  })[];
   documents?: (PermitDocumentRow & { signedUrl?: string })[];
   publicPermitUrl?: string;
 }
@@ -672,19 +676,20 @@ function drawDayPanel(
     color: COLOR.bandText,
   });
 
-  const cellH = 25;
+  const cellH = 34;
   let y = yStart + titleH;
   const map = new Map(endorsements.map((e) => [e.day_number, e]));
 
   for (let day = 2; day <= 14; day += 1) {
-    box(ctx.page, x, y, w, cellH, rgb(1, 1, 1));
+    const e = map.get(day);
+    const thisCellH = e && e.action !== "continue" && e.remarks ? cellH + 10 : cellH;
+
+    box(ctx.page, x, y, w, thisCellH, rgb(1, 1, 1));
 
     text(ctx.page, `DAY ${day}`, x + 7, y + 4, {
       font: ctx.fontBold,
       size: 7.5,
     });
-
-    const e = map.get(day);
 
     if (e) {
       const color =
@@ -700,14 +705,32 @@ function drawDayPanel(
         color,
       });
 
-      text(ctx.page, fmtDate(e.ts), x + 7, y + 15, {
+      text(ctx.page, `${fmtDate(e.ts)}  ${fmtTime(e.ts)}`, x + 7, y + 15, {
         font: ctx.font,
         size: 6.2,
         color: COLOR.muted,
       });
+
+      if (e.action !== "continue" && e.remarks) {
+        const reasonLines = wrap(`Reason: ${e.remarks}`, ctx.font, 6, w - 14);
+
+        reasonLines.slice(0, 2).forEach((lineText, lineIdx) => {
+          text(ctx.page, lineText, x + 7, y + 25 + lineIdx * 8, {
+            font: ctx.font,
+            size: 6,
+            color: COLOR.bad,
+          });
+        });
+      }
+    } else {
+      text(ctx.page, "Pending", x + 48, y + 4, {
+        font: ctx.font,
+        size: 6.7,
+        color: COLOR.muted,
+      });
     }
 
-    y += cellH;
+    y += thisCellH;
   }
 }
 
@@ -753,6 +776,8 @@ function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
       position?: string;
       checklist?: Record<string, boolean | string>;
       checklist_status?: Record<string, string>;
+      corrective_action?: string;
+      rectification_date?: string;
     }) ?? {};
 
   const intro =
@@ -798,6 +823,14 @@ function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
     font: ctx.fontBold,
     size: 8.5,
     color: data.fit === true ? COLOR.ok : COLOR.bad,
+  });
+
+  const checkboxX = MARGIN + 7 + Math.min(180, w - 14) + 14;
+
+  text(ctx.page, `Fit  ${data.fit === true ? "[X]" : "[ ]"}      Not Fit  ${data.fit === false ? "[X]" : "[ ]"}`, checkboxX, ctx.y + 4.5, {
+    font: ctx.font,
+    size: 8.5,
+    color: COLOR.ink,
   });
 
   ctx.y += 23;
@@ -869,6 +902,44 @@ function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
     }
 
     ctx.y = yy + 1;
+  }
+
+  if (data.fit === false && (data.corrective_action || data.rectification_date)) {
+    ctx.y += 4;
+
+    text(ctx.page, "Corrective Action Required:", MARGIN + 7, ctx.y, {
+      font: ctx.fontBold,
+      size: 8,
+      color: COLOR.bad,
+    });
+
+    ctx.y += 11;
+
+    const caLines = wrap(data.corrective_action || "—", ctx.font, 8.2, w - 14);
+
+    for (const lineText of caLines.slice(0, 3)) {
+      text(ctx.page, lineText, MARGIN + 7, ctx.y, {
+        font: ctx.font,
+        size: 8.2,
+      });
+      ctx.y += 9.7;
+    }
+
+    ctx.y += 3;
+
+    text(
+      ctx.page,
+      `Expected Rectification Date: ${data.rectification_date ? fmtDate(data.rectification_date) : "—"}`,
+      MARGIN + 7,
+      ctx.y,
+      {
+        font: ctx.fontBold,
+        size: 8,
+        color: COLOR.bad,
+      },
+    );
+
+    ctx.y += 14;
   }
 }
 
@@ -1608,7 +1679,11 @@ function drawAnnotations(
 
 async function drawPhotos(
   doc: PDFDocument,
-  photos: (PermitPhotoRow & { bytes?: Uint8Array; mime?: string })[],
+  photos: (PermitPhotoRow & {
+    bytes?: Uint8Array;
+    mime?: string;
+    uploaderName?: string | null;
+  })[],
   font: PDFFont,
   fontBold: PDFFont,
   serial: string,
@@ -1636,7 +1711,7 @@ async function drawPhotos(
 
   const gap = 14;
   const cardW = (A4.w - 2 * MARGIN - gap) / 2;
-  const cardH = 250;
+  const cardH = 278;
   const imgMaxH = 188;
 
   let index = 0;
@@ -1749,6 +1824,30 @@ async function drawPhotos(
         });
       });
     }
+
+    const metaTop = captionTop + (photo.caption ? 44 : 22);
+
+    page.drawText(
+      `Uploaded by: ${photo.uploaderName || "—"}`,
+      {
+        x: x + 10,
+        y: A4.h - metaTop,
+        size: 7.2,
+        font,
+        color: COLOR.muted,
+      },
+    );
+
+    page.drawText(
+      `Date: ${fmtDate(photo.uploaded_at)}  ${fmtTime(photo.uploaded_at)}`,
+      {
+        x: x + 10,
+        y: A4.h - metaTop - 10,
+        size: 7.2,
+        font,
+        color: COLOR.muted,
+      },
+    );
 
     index += 1;
   }

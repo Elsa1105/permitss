@@ -153,6 +153,8 @@ export const Stage2Schema = z
   .object({
     fit: z.boolean(),
     remarks: emptyString.default(""),
+    corrective_action: z.string().nullable().optional().default(null),
+    rectification_date: z.string().nullable().optional().default(null),
     checklist: Stage2ChecklistBooleanSchema.optional().default({}),
     checklist_status: Stage2ChecklistStatusSchema.optional(),
   })
@@ -160,6 +162,20 @@ export const Stage2Schema = z
     message: "Remarks are required when marking not fit",
     path: ["remarks"],
   })
+  .refine(
+    (v) => v.fit || Boolean(v.corrective_action && v.corrective_action.trim().length > 0),
+    {
+      message: "Corrective action is required when marking not fit",
+      path: ["corrective_action"],
+    },
+  )
+  .refine(
+    (v) => v.fit || Boolean(v.rectification_date && v.rectification_date.trim().length > 0),
+    {
+      message: "Expected rectification date is required when marking not fit",
+      path: ["rectification_date"],
+    },
+  )
   .refine(
     (v) => {
       if (!v.fit) return true;

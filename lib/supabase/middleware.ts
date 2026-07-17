@@ -2,7 +2,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./env";
 
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/public"];
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/public", "/api/public"];
 
 interface CookieToSet {
   name: string;

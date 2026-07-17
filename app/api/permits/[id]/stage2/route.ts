@@ -37,6 +37,8 @@ export async function POST(
     p_fit: parsed.data.fit,
     p_remarks: parsed.data.remarks || null,
     p_checklist: checklistPayload,
+    p_corrective_action: parsed.data.corrective_action || null,
+    p_rectification_date: parsed.data.rectification_date || null,
   });
 
   if (error) {
