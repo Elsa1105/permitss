@@ -59,7 +59,9 @@ function permitUrl(permitId: string) {
 }
 
 function publicPermitUrl(permitId: string) {
-  return `${appUrl()}/public/permits/${permitId}`;
+  // Opens the endorsed PDF directly (no login, no intermediate page),
+  // matching the QR code target embedded in the PDF itself.
+  return `${appUrl()}/api/public/permits/${permitId}/pdf`;
 }
 
 function uniqueEmails(users: UserRow[], extraEmails: string[] = []) {

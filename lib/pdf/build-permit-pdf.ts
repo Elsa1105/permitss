@@ -105,7 +105,10 @@ export async function buildPermitPdfBytes(
     process.env.NEXT_PUBLIC_SITE_URL ||
     "http://localhost:3000";
 
-  const publicPermitUrl = `${origin}/public/permits/${permit.id}`;
+  // QR must open the endorsed PDF directly (no login, no intermediate page),
+  // per client requirement: "When a QR code is scanned, the endorsed PDF
+  // record should be displayed directly without requiring login."
+  const publicPermitUrl = `${origin}/api/public/permits/${permit.id}/pdf`;
 
   const pdfBytes = await generatePermitPdf({
     permit,
