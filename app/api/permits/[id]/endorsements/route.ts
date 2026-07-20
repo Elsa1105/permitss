@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { EndorsementSchema } from "@/lib/permits/schemas";
+import { notifyPermitEvent } from "@/lib/notifications/permit-emails";
 
 export async function POST(
   request: Request,
@@ -40,6 +41,15 @@ export async function POST(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
+
+  await notifyPermitEvent({
+    supabase,
+    permitId: id,
+    event: "daily_endorsement",
+    note: `Day ${parsed.data.day_number} — ${parsed.data.action}${
+      parsed.data.remarks ? `: ${parsed.data.remarks}` : ""
+    }`,
+  });
 
   return NextResponse.json(data);
 }

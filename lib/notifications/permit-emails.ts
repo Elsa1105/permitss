@@ -8,6 +8,7 @@ type PermitEmailEvent =
   | "stage2_not_fit"
   | "stage3_approved"
   | "stage3_rejected"
+  | "daily_endorsement"
   | "stage4_closed";
 
 type NotifyPermitInput = {
@@ -79,12 +80,13 @@ function uniqueEmails(users: UserRow[], extraEmails: string[] = []) {
 
 function eventLabel(event: PermitEmailEvent) {
   const labels: Record<PermitEmailEvent, string> = {
-    stage1_submitted: "Stage I Submitted",
-    stage2_fit: "Stage II Endorsed Fit",
-    stage2_not_fit: "Stage II Marked Not Fit",
-    stage3_approved: "Stage III Approved by SRM / Project Manager",
+    stage1_submitted: "Permit Application Submitted",
+    stage2_fit: "Stage II Endorsed Fit to Work",
+    stage2_not_fit: "Stage II Marked Not Fit to Work",
+    stage3_approved: "Approved by SRM / Project Manager",
     stage3_rejected: "Stage III Rejected by SRM / Project Manager",
-    stage4_closed: "Stage IV Closed",
+    daily_endorsement: "Daily Endorsement Submitted",
+    stage4_closed: "Job Completion",
   };
 
   return labels[event];
@@ -296,61 +298,73 @@ async function getSiteRoleUsers(
     .filter((user): user is UserRow => Boolean(user));
 }
 
-function groupEmailsForCompany(company: CompanyRow | null) {
+// Group inbox addresses, per the client's 16 Jul 2026 "ePermit email
+// communication" list. Each company has its own SRM/PM, Assessor, and
+// Foreman/Applicant group inbox. Applicants are notified at their own
+// personal email (for ease of tracing) rather than the foreman group box,
+// but the group box is still CC'd for FOI/CFE-wide visibility where noted.
+function groupEmailsForCompany(
+  company: CompanyRow | null,
+  kinds: Array<"srm" | "assessor" | "foreman">,
+) {
   if (!company) return [];
 
-  if (company.code === "FOI") {
-    return ["epermit@franklin.com.sg"];
-  }
+  const byCompany: Record<string, Record<"srm" | "assessor" | "foreman", string>> = {
+    FOI: {
+      srm: "srm@franklin.com.sg",
+      assessor: "assessor@franklin.com.sg",
+      foreman: "foreman@franklin.com.sg",
+    },
+    CFE: {
+      srm: "srm@cfe.com.sg",
+      assessor: "assessor@cfe.com.sg",
+      foreman: "foreman@cfe.com.sg",
+    },
+  };
 
-  if (company.code === "CFE") {
-    return ["epermit@cfe.com.sg"];
-  }
+  const addresses = byCompany[company.code];
+  if (!addresses) return [];
 
-  return [];
+  return kinds.map((kind) => addresses[kind]).filter(Boolean);
 }
 
+// Per the client's confirmed notification spec (email 10 Jun 2026 meeting
+// notes, reconfirmed in the 16 Jul 2026 email communication list):
+//   1. Permit application   -> applicant, assessor, srm
+//   2. Fit to work          -> applicant, assessor, srm
+//   3. Not Fit to Work      -> applicant, assessor, srm
+//   4. Approved by SRM      -> applicant, assessor, srm
+//   5. Daily Endorsement    -> applicant, assessor, srm
+//   6. Job Completion       -> applicant, assessor, srm
+// Every event therefore notifies the same three stakeholders. Direct
+// assigned users (by id) are used where already set on the permit record;
+// for stage1 (submission), the permit may not yet have an assessor/srm
+// assigned, so site-scoped role holders are used as a fallback.
 async function getRecipients(
   supabase: SupabaseClient,
   permit: PermitRow,
   event: PermitEmailEvent,
 ) {
-  if (event === "stage1_submitted") {
-    return getSiteRoleUsers(supabase, permit, ["assessor"]);
-  }
+  const directIds = [
+    permit.applicant_id,
+    permit.assessor_id,
+    permit.srm_id,
+  ].filter(Boolean) as string[];
 
-  if (event === "stage2_fit") {
-    return getSiteRoleUsers(supabase, permit, ["srm"]);
-  }
+  const directUsers = await getUsersByIds(supabase, directIds);
 
-  if (event === "stage2_not_fit") {
-    return getUsersByIds(
-      supabase,
-      [permit.applicant_id].filter(Boolean) as string[],
-    );
-  }
+  // Fill in any stakeholder not yet assigned directly on the permit record
+  // (e.g. no assessor_id yet at submission time) using site-scoped role
+  // holders, so nobody responsible for the site is missed.
+  const missingRoles: string[] = [];
+  if (!permit.assessor_id) missingRoles.push("assessor");
+  if (!permit.srm_id) missingRoles.push("srm");
 
-  if (event === "stage3_approved" || event === "stage3_rejected") {
-    const directUsers = await getUsersByIds(
-      supabase,
-      [permit.applicant_id, permit.assessor_id, permit.srm_id].filter(
-        Boolean,
-      ) as string[],
-    );
+  const fallbackUsers = missingRoles.length
+    ? await getSiteRoleUsers(supabase, permit, missingRoles)
+    : [];
 
-    return directUsers;
-  }
-
-  if (event === "stage4_closed") {
-    return getUsersByIds(
-      supabase,
-      [permit.applicant_id, permit.assessor_id, permit.srm_id].filter(
-        Boolean,
-      ) as string[],
-    );
-  }
-
-  return [];
+  return [...directUsers, ...fallbackUsers];
 }
 
 export async function notifyPermitEvent(input: NotifyPermitInput) {
@@ -363,13 +377,15 @@ export async function notifyPermitEvent(input: NotifyPermitInput) {
   const company = await getCompany(input.supabase, permit.company_id);
   const recipients = await getRecipients(input.supabase, permit, input.event);
 
-  const groupEmails =
-    input.event === "stage1_submitted" ||
-    input.event === "stage2_fit" ||
-    input.event === "stage3_approved" ||
-    input.event === "stage3_rejected"
-      ? groupEmailsForCompany(company)
-      : [];
+  // CC all three group inboxes on every event, per the client's spec that
+  // every one of the 6 notification types reaches applicant + assessor + SRM.
+  // Group inboxes give visibility even if an individual's personal address
+  // bounces or a role is temporarily unassigned.
+  const groupEmails = groupEmailsForCompany(company, [
+    "srm",
+    "assessor",
+    "foreman",
+  ]);
 
   const emails = uniqueEmails(recipients, groupEmails);
 
