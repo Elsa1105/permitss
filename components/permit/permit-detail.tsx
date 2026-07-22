@@ -361,6 +361,23 @@ export function PermitDetail({
             ) : null}
 
             <Stage2Form permitId={permit.id} />
+
+            <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+              <div className="mb-3">
+                <h4 className="text-sm font-semibold text-slate-900">
+                  Assessor Photo & Sketch Evidence
+                </h4>
+                <p className="mt-1 text-xs text-slate-600">
+                  Attach site photos and use the sketch/annotation tools to mark the relevant area before completing the assessment.
+                </p>
+              </div>
+              <PhotoUploader
+                permitId={permit.id}
+                bucket={bucket}
+                initialPhotos={photos}
+                disabled={false}
+              />
+            </div>
           </>
         ) : (
           <PendingNotice

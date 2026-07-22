@@ -117,9 +117,27 @@ export async function POST(request: Request) {
     }
   }
 
+  const { data: company, error: companyError } = await supabase
+    .from("companies")
+    .select("code")
+    .eq("id", payload.company_id)
+    .single();
+
+  if (companyError || !company) {
+    return NextResponse.json(
+      { error: "Selected company could not be found" },
+      { status: 400 },
+    );
+  }
+
+  const permitNumberType =
+    company.code?.trim().toUpperCase() === "CFE"
+      ? "hot_work_onshore_cfe"
+      : "hot_work_onshore";
+
   const { data: serialData, error: serialErr } = await supabase.rpc(
     "next_permit_serial",
-    { p_permit_type: "hot_work_onshore" },
+    { p_permit_type: permitNumberType },
   );
 
   if (serialErr || !serialData) {
