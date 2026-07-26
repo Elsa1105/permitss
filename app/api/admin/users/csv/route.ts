@@ -5,6 +5,11 @@ import {
 } from "@/lib/supabase/server";
 import type { UserRole } from "@/lib/supabase/types";
 
+// Give this route up to 60s on Vercel (default is much shorter) since a
+// large CSV with per-row delays/retries can legitimately take a while.
+// 60s is the max allowed even on the Hobby plan.
+export const maxDuration = 60;
+
 const TEMPLATE = `email,full_name,department,role,qualified_for,active,company_code,site_code,site_role
 foreman@franklin.example,Foreman Applicant,Operations,applicant,hot_work_applicant,true,FOI,MAIN,applicant
 contractor.vendor@example.com,Contractor Vendor,Contractor,contractor,hot_work_applicant,true,FOI,MAIN,contractor
@@ -94,7 +99,14 @@ export async function POST(request: Request) {
   let skipped = 0;
   let siteRolesAssigned = 0;
 
-  for (const row of rows) {
+  for (const [rowIndex, row] of rows.entries()) {
+    // Space out invite emails so we don't slam the email provider's
+    // rate limiter. A small delay before every row is cheap and keeps
+    // things predictable even for existing-user rows.
+    if (rowIndex > 0) {
+      await sleep(INVITE_DELAY_MS);
+    }
+
     if (!VALID_ROLES.has(row.role)) {
       errors.push({
         row: row.rowNumber,
@@ -142,14 +154,7 @@ export async function POST(request: Request) {
 
         updated++;
       } else {
-        const invite = await admin.auth.admin.inviteUserByEmail(row.email, {
-          data: {
-            full_name: row.full_name,
-            department: row.department ?? null,
-            role: row.role,
-            qualified_for: row.qualified_for.join(","),
-          },
-        });
+        const invite = await inviteWithRetry(admin, row);
 
         if (invite.error) {
           throw invite.error;
@@ -210,6 +215,62 @@ export async function POST(request: Request) {
     siteRolesAssigned,
     errors,
   });
+}
+
+// Base delay between rows (ms). Keeps us well under typical SMTP
+// provider rate limits (e.g. Resend free tier ~2 req/sec).
+const INVITE_DELAY_MS = 400;
+
+// Max attempts for a single invite before giving up and reporting it
+// as an error row (which the admin can retry by re-uploading the CSV -
+// existing users are skipped/updated, so re-running is safe).
+// Kept low (with a short fixed backoff, not exponential) so a CSV full
+// of failures can never push the whole request past the Vercel
+// function timeout (maxDuration = 60 above).
+const MAX_INVITE_ATTEMPTS = 2;
+const RETRY_BACKOFF_MS = 1000;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRateLimitError(error: unknown): boolean {
+  const msg =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+
+  return /rate limit/i.test(msg) || /too many requests/i.test(msg);
+}
+
+async function inviteWithRetry(
+  admin: ReturnType<typeof createServiceRoleSupabase>,
+  row: ParsedRow,
+) {
+  let attempt = 0;
+
+  for (;;) {
+    attempt++;
+
+    const invite = await admin.auth.admin.inviteUserByEmail(row.email, {
+      data: {
+        full_name: row.full_name,
+        department: row.department ?? null,
+        role: row.role,
+        qualified_for: row.qualified_for.join(","),
+      },
+    });
+
+    const hitRateLimit = invite.error && isRateLimitError(invite.error);
+
+    if (!hitRateLimit || attempt >= MAX_INVITE_ATTEMPTS) {
+      return invite;
+    }
+
+    await sleep(RETRY_BACKOFF_MS);
+  }
 }
 
 function parseCsv(text: string): {
