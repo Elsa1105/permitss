@@ -15,6 +15,8 @@ export function CsvUpload() {
     updated: number;
     skipped: number;
     errors: { row: number; email?: string; error: string }[];
+    defaultPassword?: string;
+    defaultPasswordAssigned?: string[];
   } | null>(null);
 
   async function onFile(file: File) {
@@ -31,7 +33,7 @@ export function CsvUpload() {
       }
       setReport(body);
       toast.success(
-        `${body.invited} invited, ${body.updated} updated, ${body.skipped} skipped`,
+        `${body.invited} created, ${body.updated} updated, ${body.skipped} skipped`,
       );
       router.refresh();
     } finally {
@@ -70,10 +72,32 @@ export function CsvUpload() {
       {report ? (
         <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm space-y-2">
           <div>
-            <strong>{report.invited}</strong> new users invited (email confirmation sent),{" "}
+            <strong>{report.invited}</strong> new users created,{" "}
             <strong>{report.updated}</strong> existing users updated,{" "}
             <strong>{report.skipped}</strong> rows skipped.
           </div>
+          {report.defaultPasswordAssigned && report.defaultPasswordAssigned.length > 0 ? (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900">
+              <div className="font-medium">
+                Default password for new accounts: <code>{report.defaultPassword}</code>
+              </div>
+              <div className="mt-1">
+                Share this with the {report.defaultPasswordAssigned.length} new user(s) below
+                (WhatsApp, verbally, printed sheet) — no email was sent. Tell them to change it
+                after their first login.
+              </div>
+              <details className="mt-2">
+                <summary className="cursor-pointer">
+                  Show the {report.defaultPasswordAssigned.length} new account(s)
+                </summary>
+                <ul className="mt-2 ml-4 list-disc text-xs">
+                  {report.defaultPasswordAssigned.map((email) => (
+                    <li key={email}>{email}</li>
+                  ))}
+                </ul>
+              </details>
+            </div>
+          ) : null}
           {report.errors.length > 0 ? (
             <details>
               <summary className="cursor-pointer text-red-700 font-medium">
