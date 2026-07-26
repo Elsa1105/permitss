@@ -98,6 +98,7 @@ export async function POST(request: Request) {
   let updated = 0;
   let skipped = 0;
   let siteRolesAssigned = 0;
+  const defaultPasswordAssigned: string[] = [];
 
   for (const [rowIndex, row] of rows.entries()) {
     // Space out invite emails so we don't slam the email provider's
@@ -154,17 +155,17 @@ export async function POST(request: Request) {
 
         updated++;
       } else {
-        const invite = await inviteWithRetry(admin, row);
+        const created = await createUserDirect(admin, row);
 
-        if (invite.error) {
-          throw invite.error;
+        if (created.error) {
+          throw created.error;
         }
 
-        if (invite.data.user) {
-          userId = invite.data.user.id;
+        if (created.data.user) {
+          userId = created.data.user.id;
 
           const upsert = await admin.from("users").upsert({
-            id: invite.data.user.id,
+            id: created.data.user.id,
             email: row.email,
             full_name: row.full_name,
             department: row.department ?? null,
@@ -176,6 +177,8 @@ export async function POST(request: Request) {
           if (upsert.error) {
             throw upsert.error;
           }
+
+          defaultPasswordAssigned.push(row.email);
         }
 
         invited++;
@@ -214,63 +217,40 @@ export async function POST(request: Request) {
     skipped,
     siteRolesAssigned,
     errors,
+    defaultPassword: DEFAULT_PASSWORD,
+    defaultPasswordAssigned,
   });
 }
 
-// Base delay between rows (ms). Keeps us well under typical SMTP
-// provider rate limits (e.g. Resend free tier ~2 req/sec).
-const INVITE_DELAY_MS = 400;
+// Every bulk-imported user gets this password to start. They are expected
+// to change it after their first login (make sure your login flow / a
+// "change password" option is reachable). Not sent by email - share it
+// with the team directly (WhatsApp, printed sheet, verbally, etc).
+const DEFAULT_PASSWORD = "Franklin@2026";
 
-// Max attempts for a single invite before giving up and reporting it
-// as an error row (which the admin can retry by re-uploading the CSV -
-// existing users are skipped/updated, so re-running is safe).
-// Kept low (with a short fixed backoff, not exponential) so a CSV full
-// of failures can never push the whole request past the Vercel
-// function timeout (maxDuration = 60 above).
-const MAX_INVITE_ATTEMPTS = 2;
-const RETRY_BACKOFF_MS = 1000;
+// Small delay between rows just to avoid hammering the DB/API in a tight
+// loop - no email is sent anymore, so this can be short.
+const INVITE_DELAY_MS = 150;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isRateLimitError(error: unknown): boolean {
-  const msg =
-    error instanceof Error
-      ? error.message
-      : typeof error === "string"
-        ? error
-        : "";
-
-  return /rate limit/i.test(msg) || /too many requests/i.test(msg);
-}
-
-async function inviteWithRetry(
+async function createUserDirect(
   admin: ReturnType<typeof createServiceRoleSupabase>,
   row: ParsedRow,
 ) {
-  let attempt = 0;
-
-  for (;;) {
-    attempt++;
-
-    const invite = await admin.auth.admin.inviteUserByEmail(row.email, {
-      data: {
-        full_name: row.full_name,
-        department: row.department ?? null,
-        role: row.role,
-        qualified_for: row.qualified_for.join(","),
-      },
-    });
-
-    const hitRateLimit = invite.error && isRateLimitError(invite.error);
-
-    if (!hitRateLimit || attempt >= MAX_INVITE_ATTEMPTS) {
-      return invite;
-    }
-
-    await sleep(RETRY_BACKOFF_MS);
-  }
+  return admin.auth.admin.createUser({
+    email: row.email,
+    password: DEFAULT_PASSWORD,
+    email_confirm: true, // skip email confirmation entirely - no email sent
+    user_metadata: {
+      full_name: row.full_name,
+      department: row.department ?? null,
+      role: row.role,
+      qualified_for: row.qualified_for.join(","),
+    },
+  });
 }
 
 function parseCsv(text: string): {
