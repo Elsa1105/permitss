@@ -181,9 +181,7 @@ export function PermitTable({
           <SortChip label="Serial" sortKey="serial_no" sort={sort} onSort={toggleSort} />
           <SortChip label="Job Type" sortKey="job_type" sort={sort} onSort={toggleSort} />
           <SortChip label="Company/Site" sortKey="company_site" sort={sort} onSort={toggleSort} />
-          <SortChip label="Vessel/Project" sortKey="vessel_project" sort={sort} onSort={toggleSort} />
           <SortChip label="Location" sortKey="location_of_work" sort={sort} onSort={toggleSort} />
-          <SortChip label="Applicant" sortKey="applicant" sort={sort} onSort={toggleSort} />
           <SortChip label="Dates" sortKey="date_commencement" sort={sort} onSort={toggleSort} />
           <SortChip label="Status" sortKey="state" sort={sort} onSort={toggleSort} />
         </div>
@@ -194,7 +192,7 @@ export function PermitTable({
           </p>
         ) : (
           <div className="divide-y divide-slate-200">
-            {visiblePermits.map(({ permit: p, companySite, applicant }) => (
+            {visiblePermits.map(({ permit: p, companySite }) => (
               <Link
                 key={p.id}
                 href={`/permits/${p.id}`}
@@ -208,27 +206,15 @@ export function PermitTable({
                     <span className="font-mono text-xs text-slate-500">
                       {p.serial_no}
                     </span>
-                    {p.job_type ? (
-                      <span className="text-xs text-slate-400">
-                        · {p.job_type}
-                      </span>
-                    ) : null}
                   </div>
 
                   <div className="truncate font-medium text-slate-900">
-                    {p.vessel_project || "—"}
+                    {p.job_type || "—"}
                   </div>
 
                   <div className="truncate text-xs text-slate-500">
                     {companySite}
                     {p.location_of_work ? ` · ${p.location_of_work}` : ""}
-                  </div>
-
-                  <div className="truncate text-xs text-slate-500">
-                    {applicant}
-                    {p.display_applicant_department
-                      ? ` · ${p.display_applicant_department}`
-                      : ""}
                   </div>
                 </div>
 

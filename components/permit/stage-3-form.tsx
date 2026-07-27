@@ -113,6 +113,13 @@ export function Stage3Form({ permitId }: { permitId: string }) {
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
+      <p className="text-xs text-slate-400 border-t border-slate-200 pt-2">
+        <span className="font-medium">Reject</span> vs <span className="font-medium">Revoke</span>:
+        Reject applies here, at Day 0 of the application, when the permit is not approved to begin.
+        Once a permit has been approved and work has started, it can no longer be rejected — it can
+        only be Revoked (see the daily endorsement step) if it needs to be stopped.
+      </p>
+
       <div className="flex justify-end">
         <Button type="submit" loading={submitting}>
           Submit Decision

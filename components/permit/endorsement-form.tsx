@@ -151,11 +151,18 @@ export function EndorsementForm({
           onChange={(e) => setAction(e.target.value as typeof action)}
           options={[
             { value: "continue", label: "Continue" },
-            { value: "reject", label: "Reject" },
             { value: "revoke", label: "Revoke" },
+            { value: "reject", label: "Reject (rarely used after Day 0 — see note below)" },
           ]}
           disabled={!canSubmit}
         />
+        {action === "reject" ? (
+          <p className="text-xs text-amber-700">
+            Heads up: Reject is meant for Day 0, before the permit is approved. Since this permit
+            is already active, Revoke is normally the correct action to stop it. Only choose Reject
+            here if you specifically mean to reverse the original approval decision itself.
+          </p>
+        ) : null}
       </div>
 
       <Textarea
@@ -165,6 +172,12 @@ export function EndorsementForm({
         onChange={(e) => setRemarks(e.target.value)}
         disabled={!canSubmit}
       />
+
+      <p className="text-xs text-slate-400 border-t border-slate-200 pt-2">
+        <span className="font-medium">Reject</span> = not approved at Day 0 (before work starts).{" "}
+        <span className="font-medium">Revoke</span> = stopping work that was already approved and
+        has started. From Day 2 onward, use Revoke.
+      </p>
 
       <div className="flex justify-end">
         <Button type="submit" loading={submitting} disabled={!canSubmit}>
