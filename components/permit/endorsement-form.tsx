@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, Textarea } from "@/components/ui/input";
+import {
+  CONTINUE_DEFINITION,
+  REJECT_DEFINITION,
+  REVOKE_DEFINITION,
+} from "@/lib/permits/action-definitions";
 
 interface Props {
   permitId: string;
@@ -152,7 +157,11 @@ export function EndorsementForm({
           options={[
             { value: "continue", label: "Continue" },
             { value: "revoke", label: "Revoke" },
-            { value: "reject", label: "Reject (rarely used after Day 0 — see note below)" },
+            {
+              value: "reject",
+              label: "Reject (rarely used after Day 0 — see note below)",
+              muted: true,
+            },
           ]}
           disabled={!canSubmit}
         />
@@ -174,9 +183,8 @@ export function EndorsementForm({
       />
 
       <p className="text-xs text-slate-400 border-t border-slate-200 pt-2">
-        <span className="font-medium">Reject</span> = not approved at Day 0 (before work starts).{" "}
-        <span className="font-medium">Revoke</span> = stopping work that was already approved and
-        has started. From Day 2 onward, use Revoke.
+        <span className="font-medium">Definitions</span> — {CONTINUE_DEFINITION}{" "}
+        {REJECT_DEFINITION} {REVOKE_DEFINITION} From Day 2 onward, use Revoke.
       </p>
 
       <div className="flex justify-end">

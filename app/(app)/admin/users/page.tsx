@@ -127,7 +127,7 @@ export default async function AdminUsersPage() {
         </CardHeader>
 
         <CardBody>
-          <ManualUserForm />
+          <ManualUserForm companies={companies} sites={sites} />
         </CardBody>
       </Card>
 
@@ -167,7 +167,7 @@ export default async function AdminUsersPage() {
             action={addSiteRole}
             className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-4"
           >
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <label className="field">
                 <span className="field-label field-required">User</span>
                 <select name="user_id" className="input" required>
@@ -180,35 +180,30 @@ export default async function AdminUsersPage() {
                 </select>
               </label>
 
-              <label className="field">
-                <span className="field-label field-required">Company</span>
-                <select name="company_id" className="input" required>
-                  <option value="">Select company</option>
+              <div className="field">
+                <span className="field-label field-required">
+                  Company access
+                </span>
+                <div className="flex flex-wrap gap-2 mt-1">
                   {companies.map((company) => (
-                    <option key={company.id} value={company.id}>
-                      {company.code} - {company.name}
-                    </option>
+                    <label
+                      key={company.id}
+                      className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        name="company_id"
+                        value={company.id}
+                      />
+                      <span>{company.code}</span>
+                    </label>
                   ))}
-                </select>
-              </label>
-
-              <label className="field">
-                <span className="field-label field-required">Site</span>
-                <select name="site_id" className="input" required>
-                  <option value="">Select site</option>
-                  {sites.map((site) => {
-                    const company = companies.find(
-                      (item) => item.id === site.company_id,
-                    );
-
-                    return (
-                      <option key={site.id} value={site.id}>
-                        {company?.code ?? "Company"} / {site.code} - {site.name}
-                      </option>
-                    );
-                  })}
-                </select>
-              </label>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Tick FOI, CFE, or both — Assessors and SRMs will only see
+                  and act on permits for the company/site(s) selected here.
+                </p>
+              </div>
 
               <label className="field">
                 <span className="field-label field-required">Role</span>
@@ -337,12 +332,16 @@ async function addSiteRole(formData: FormData) {
   await requireAdmin();
 
   const userId = String(formData.get("user_id") ?? "");
-  const companyId = String(formData.get("company_id") ?? "");
-  const siteId = String(formData.get("site_id") ?? "");
+  // Company access is now a checkbox group — FOI, CFE, or both can be
+  // selected at once, per Alex's request.
+  const companyIds = formData
+    .getAll("company_id")
+    .map((value) => String(value))
+    .filter(Boolean);
   const role = String(formData.get("role") ?? "") as UserRole;
 
-  if (!userId || !companyId || !siteId || !role) {
-    throw new Error("User, company, site, and role are required.");
+  if (!userId || companyIds.length === 0 || !role) {
+    throw new Error("User, at least one company, and role are required.");
   }
 
   if (!ROLE_VALUES.includes(role)) {
@@ -351,18 +350,31 @@ async function addSiteRole(formData: FormData) {
 
   const service = createServiceRoleSupabase();
 
-  const { error } = await service.from("user_site_roles").upsert(
-    {
-      user_id: userId,
-      company_id: companyId,
-      site_id: siteId,
-      role,
-      active: true,
-    },
-    {
-      onConflict: "user_id,company_id,site_id,role",
-    },
-  );
+  const { data: sites, error: sitesError } = await service
+    .from("sites")
+    .select("id, company_id")
+    .in("company_id", companyIds)
+    .eq("active", true);
+
+  if (sitesError) {
+    throw new Error(sitesError.message);
+  }
+
+  if (!sites || sites.length === 0) {
+    throw new Error("No active sites found for the selected company/companies.");
+  }
+
+  const rows = sites.map((site) => ({
+    user_id: userId,
+    company_id: site.company_id,
+    site_id: site.id,
+    role,
+    active: true,
+  }));
+
+  const { error } = await service
+    .from("user_site_roles")
+    .upsert(rows, { onConflict: "user_id,company_id,site_id,role" });
 
   if (error) {
     throw new Error(error.message);

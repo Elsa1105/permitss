@@ -437,6 +437,7 @@ export function PermitDetail({
               pendingDays={pendingDays}
               selectedDay={selectedDay}
               onSelectDay={setSelectedDay}
+              interactive={showEndorsementForm}
             />
 
             {showEndorsementForm ? (
@@ -730,12 +731,17 @@ function EndorsementGrid({
   pendingDays,
   selectedDay,
   onSelectDay,
+  interactive = false,
 }: {
   endorsements: PermitEndorsementRow[];
   dayRange: number;
   pendingDays?: number[];
   selectedDay?: number;
   onSelectDay?: (day: number) => void;
+  /** Only SRM/admin can actually submit an endorsement. Safety Assessors and
+   * other viewers see the same grid for status, but it must never look
+   * clickable/actionable for them — view only. */
+  interactive?: boolean;
 }) {
   const days = Array.from(
     { length: Math.min(13, dayRange - 1) },
@@ -782,7 +788,11 @@ function EndorsementGrid({
               </>
             ) : isPending ? (
               <div className="mt-1">
-                {isSelected ? "Selected" : "Click to endorse"}
+                {interactive
+                  ? isSelected
+                    ? "Selected"
+                    : "Click to endorse"
+                  : "Awaiting SRM endorsement"}
               </div>
             ) : (
               <div className="mt-1">Pending</div>
@@ -790,9 +800,12 @@ function EndorsementGrid({
           </>
         );
 
-        // Pending days become clickable buttons — this is the day picker.
-        // Already-endorsed and not-yet-available days stay as static cards.
-        if (isPending && onSelectDay) {
+        // Pending days become clickable buttons only for viewers who can
+        // actually endorse (SRM/admin) — this is the day picker. For
+        // view-only roles (e.g. Safety Assessor), and for already-endorsed
+        // or not-yet-available days, the cell stays a static, non-clickable
+        // card.
+        if (isPending && onSelectDay && interactive) {
           return (
             <button
               key={day}

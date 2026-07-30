@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
+import type { CompanyRow, SiteRow } from "@/lib/supabase/types";
 
 const ROLE_OPTIONS = [
   { value: "applicant", label: "Applicant" },
@@ -21,7 +22,12 @@ const QUALIFICATION_OPTIONS = [
   { value: "hot_work_srm", label: "Hot Work SRM" },
 ];
 
-export function ManualUserForm() {
+interface Props {
+  companies: CompanyRow[];
+  sites: SiteRow[];
+}
+
+export function ManualUserForm({ companies, sites }: Props) {
   const router = useRouter();
 
   const [open, setOpen] = React.useState(false);
@@ -35,6 +41,9 @@ export function ManualUserForm() {
     role: "applicant",
     qualified_for: [] as string[],
     active: true,
+    // Company access — FOI, CFE, or both (matches Elsa's "field for company
+    // selection" request). Stores company ids.
+    company_ids: [] as string[],
   });
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
@@ -50,6 +59,15 @@ export function ManualUserForm() {
     }));
   }
 
+  function toggleCompany(companyId: string) {
+    setForm((current) => ({
+      ...current,
+      company_ids: current.company_ids.includes(companyId)
+        ? current.company_ids.filter((item) => item !== companyId)
+        : [...current.company_ids, companyId],
+    }));
+  }
+
   function resetForm() {
     setForm({
       email: "",
@@ -59,6 +77,7 @@ export function ManualUserForm() {
       role: "applicant",
       qualified_for: [],
       active: true,
+      company_ids: [],
     });
   }
 
@@ -82,6 +101,19 @@ export function ManualUserForm() {
 
     setSubmitting(true);
 
+    // Company access (FOI / CFE / both) grants site-scoped access for every
+    // active site under each selected company, using the same role chosen
+    // above.
+    const site_roles = sites
+      .filter(
+        (site) => site.active && form.company_ids.includes(site.company_id),
+      )
+      .map((site) => ({
+        company_id: site.company_id,
+        site_id: site.id,
+        role: form.role,
+      }));
+
     try {
       const res = await fetch("/api/admin/users", {
         method: "POST",
@@ -94,6 +126,7 @@ export function ManualUserForm() {
           role: form.role,
           qualified_for: form.qualified_for,
           active: form.active,
+          site_roles,
         }),
       });
 
@@ -202,6 +235,32 @@ export function ManualUserForm() {
             <option value="inactive">Inactive</option>
           </select>
         </label>
+      </div>
+
+      <div className="space-y-2">
+        <p className="field-label">Company Access</p>
+        <p className="text-xs text-slate-500">
+          Select FOI, CFE, or both — this determines which permits the user
+          can see and act on.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {companies.map((company) => (
+            <label
+              key={company.id}
+              className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <input
+                type="checkbox"
+                checked={form.company_ids.includes(company.id)}
+                onChange={() => toggleCompany(company.id)}
+              />
+              <span>
+                {company.code} — {company.name}
+              </span>
+            </label>
+          ))}
+        </div>
       </div>
 
       <div className="space-y-2">

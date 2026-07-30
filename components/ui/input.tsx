@@ -73,7 +73,7 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   required?: boolean;
   error?: string;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; muted?: boolean }[];
 }
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
@@ -96,7 +96,15 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           {...rest}
         >
           {options.map((o) => (
-            <option key={o.value} value={o.value}>
+            <option
+              key={o.value}
+              value={o.value}
+              // "Dulled" options render in a muted grey so an action that is
+              // technically available but rarely the right choice in this
+              // context doesn't look equally weighted against the common
+              // choices.
+              style={o.muted ? { color: "#94a3b8" } : undefined}
+            >
               {o.label}
             </option>
           ))}
