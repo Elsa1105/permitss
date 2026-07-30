@@ -42,12 +42,24 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
+  // Bulk catch-up (migration 0024): permit_endorse_day() auto-fills any
+  // earlier open day as Continue when a later day is submitted. Surface
+  // that in the notification note so recipients aren't confused about
+  // where those extra endorsement rows came from.
+  const filledDays: number[] = Array.isArray(data?.filled_days)
+    ? data.filled_days
+    : [];
+
   await notifyPermitEvent({
     supabase,
     permitId: id,
     event: "daily_endorsement",
     note: `Day ${parsed.data.day_number} — ${parsed.data.action}${
       parsed.data.remarks ? `: ${parsed.data.remarks}` : ""
+    }${
+      filledDays.length
+        ? ` (Day ${filledDays.join(", ")} auto-filled as Continue)`
+        : ""
     }`,
   });
 

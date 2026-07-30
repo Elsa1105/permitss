@@ -96,7 +96,15 @@ export function EndorsementForm({
         return;
       }
 
-      toast.success(`Day ${selectedDay} ${action}`);
+      const filledDays: number[] = Array.isArray(body?.filled_days)
+        ? body.filled_days
+        : [];
+
+      toast.success(
+        filledDays.length
+          ? `Day ${selectedDay} ${action} — Day ${filledDays.join(", ")} auto-filled as Continue`
+          : `Day ${selectedDay} ${action}`,
+      );
       setRemarks("");
       setAction("continue");
 
@@ -129,9 +137,13 @@ export function EndorsementForm({
         ) : (
           <p className="mt-1 text-xs text-slate-500">
             Click a day above (today or a missed day — public holiday, leave,
-            oversight) to select it, then submit below. Any authorised SRM /
-            Project Manager for this site may submit the endorsement for
-            leave coverage.
+            oversight) to select it, then submit below. Any earlier day that
+            hasn&apos;t been endorsed yet will be auto-filled as
+            &quot;Continue&quot; when you submit — e.g. submitting Day 5 with
+            Days 2–4 still open will fill Days 2–4 as Continue and record
+            your chosen action for Day 5. Any authorised SRM / Project
+            Manager for this site may submit the endorsement for leave
+            coverage.
           </p>
         )}
       </div>

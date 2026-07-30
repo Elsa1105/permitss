@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/srm-endorsement-reminder",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/applicant-closure-reminder",
+      "schedule": "0 1 * * *"
+    }
+  ]
+}
