@@ -1,7 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { Search, X, ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Search,
+  X,
+} from "lucide-react";
 
 import { PermitStatusBadge } from "@/components/permit/status-badge";
 import { formatDate } from "@/lib/utils";
@@ -9,7 +15,9 @@ import type { PermitWithJoins } from "@/lib/supabase/types";
 
 type PermitTableRow = PermitWithJoins & {
   job_type?: string | null;
+
   display_applicant_name?: string | null;
+
   display_applicant_department?: string | null;
 
   company?: {
@@ -42,137 +50,171 @@ type SortState = {
 
 interface PermitTableProps {
   permits: PermitWithJoins[];
+
+  /*
+   * Keep this search separate from your existing filters.
+   * Parent-level filters still work normally.
+   */
   searchable?: boolean;
+
   searchPlaceholder?: string;
 }
 
 export function PermitTable({
   permits,
   searchable = false,
-  searchPlaceholder =
-    "Search by serial, job type, vessel, location, applicant, or status",
+  searchPlaceholder = "Search permits...",
 }: PermitTableProps) {
   const [query, setQuery] = React.useState("");
-  const [sort, setSort] = React.useState<SortState>(null);
+
+  const [sort, setSort] =
+    React.useState<SortState>(null);
 
   /*
   ============================================================
-  FILTER + SEARCH + SORT
+  SEARCH + SORT
   ============================================================
 
-  Applicant and Vessel/Project:
-  - NOT displayed in table
-  - STILL searchable
-  - NO sorting buttons
+  The permits passed into this component have already been
+  filtered by the existing filters.
+
+  This component only:
+  1. Searches
+  2. Sorts
+  3. Displays the table
   */
 
-  const visiblePermits = React.useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+  const visiblePermits =
+    React.useMemo(() => {
+      const normalizedQuery =
+        query.trim().toLowerCase();
 
-    const rows = permits.map((permit, index) => {
-      const p = permit as PermitTableRow;
+      const rows = permits.map(
+        (permit, index) => {
+          const p =
+            permit as PermitTableRow;
 
-      const companySite = formatCompanySite(p);
+          const companySite =
+            formatCompanySite(p);
 
-      const applicant = formatApplicant(p);
+          const applicant =
+            formatApplicant(p);
 
-      /*
-      Applicant and Vessel/Project are intentionally included
-      ONLY in searchText.
+          /*
+          Applicant and Vessel/Project
+          remain searchable.
 
-      They will NOT be rendered as table columns.
-      */
+          They are NOT displayed as columns.
+          */
 
-      const searchText = [
-        // Visible table fields
-        p.serial_no,
-        p.job_type,
-        companySite,
-        p.location_of_work,
-        p.date_commencement,
-        p.date_completion,
-        p.state,
-        p.state?.replaceAll("_", " "),
+          const searchText = [
+            // Visible fields
+            p.serial_no,
+            p.job_type,
+            companySite,
+            p.location_of_work,
+            p.date_commencement,
+            p.date_completion,
+            p.state,
+            p.state?.replaceAll(
+              "_",
+              " ",
+            ),
 
-        // Hidden searchable fields
-        p.vessel_project,
-        applicant,
-        p.display_applicant_department,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+            // Hidden searchable fields
+            p.vessel_project,
+            applicant,
+            p.display_applicant_department,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
 
-      return {
-        permit: p,
-        originalIndex: index,
-        companySite,
-        searchText,
-      };
-    });
+          return {
+            permit: p,
 
-    /*
-    ============================================================
-    SEARCH
-    ============================================================
-    */
+            companySite,
 
-    const filteredRows = normalizedQuery
-      ? rows.filter((row) =>
-          row.searchText.includes(normalizedQuery),
-        )
-      : rows;
+            searchText,
 
-    /*
-    ============================================================
-    DEFAULT ORDER
-    ============================================================
-    */
-
-    if (!sort) {
-      return filteredRows;
-    }
-
-    /*
-    ============================================================
-    SORT
-    ============================================================
-    */
-
-    return [...filteredRows].sort((a, b) => {
-      const left = sortValue(
-        a.permit,
-        sort.key,
-        a.companySite,
-      );
-
-      const right = sortValue(
-        b.permit,
-        sort.key,
-        b.companySite,
-      );
-
-      const compared = left.localeCompare(
-        right,
-        undefined,
-        {
-          numeric: true,
-          sensitivity: "base",
+            originalIndex: index,
+          };
         },
       );
 
-      if (compared === 0) {
-        return (
-          a.originalIndex -
-          b.originalIndex
-        );
+      /*
+      ==========================================================
+      SEARCH
+      ==========================================================
+      */
+
+      const filtered =
+        normalizedQuery
+          ? rows.filter((row) =>
+              row.searchText.includes(
+                normalizedQuery,
+              ),
+            )
+          : rows;
+
+      /*
+      ==========================================================
+      NO SORT
+      ==========================================================
+      */
+
+      if (!sort) {
+        return filtered;
       }
 
-      return sort.direction === "asc"
-        ? compared
-        : -compared;
-    });
-  }, [permits, query, sort]);
+      /*
+      ==========================================================
+      SORT
+      ==========================================================
+      */
+
+      return [...filtered].sort(
+        (a, b) => {
+          const left = sortValue(
+            a.permit,
+            sort.key,
+            a.companySite,
+          );
+
+          const right = sortValue(
+            b.permit,
+            sort.key,
+            b.companySite,
+          );
+
+          const compared =
+            left.localeCompare(
+              right,
+              undefined,
+              {
+                numeric: true,
+                sensitivity: "base",
+              },
+            );
+
+          if (compared === 0) {
+            return (
+              a.originalIndex -
+              b.originalIndex
+            );
+          }
+
+          return sort.direction ===
+            "asc"
+            ? compared
+            : -compared;
+        },
+      );
+    }, [
+      permits,
+      query,
+      sort,
+    ]);
 
   /*
   ============================================================
@@ -180,7 +222,9 @@ export function PermitTable({
   ============================================================
   */
 
-  function toggleSort(key: SortKey) {
+  function toggleSort(
+    key: SortKey,
+  ) {
     setSort((current) => {
       /*
       First click:
@@ -203,7 +247,8 @@ export function PermitTable({
       */
 
       if (
-        current.direction === "asc"
+        current.direction ===
+        "asc"
       ) {
         return {
           key,
@@ -224,8 +269,12 @@ export function PermitTable({
     <div className="w-full">
       {/*
       ============================================================
-      SEARCH BAR
+      SEARCH
       ============================================================
+
+      This search is ADDITIONAL to your existing filters.
+
+      Existing filters are NOT removed.
       */}
 
       {searchable && (
@@ -252,9 +301,13 @@ export function PermitTable({
               type="search"
               value={query}
               onChange={(event) =>
-                setQuery(event.target.value)
+                setQuery(
+                  event.target.value,
+                )
               }
-              placeholder={searchPlaceholder}
+              placeholder={
+                searchPlaceholder
+              }
               className="input w-full pl-9 pr-10"
             />
 
@@ -288,11 +341,7 @@ export function PermitTable({
 
           <p className="mt-1.5 text-xs text-slate-500">
             {visiblePermits.length} of{" "}
-            {permits.length} permit
-            {permits.length === 1
-              ? ""
-              : "s"}{" "}
-            shown.
+            {permits.length} permits shown.
           </p>
         </div>
       )}
@@ -302,26 +351,27 @@ export function PermitTable({
       TABLE
       ============================================================
 
-      EXACTLY 6 VISIBLE COLUMNS:
+      ONLY THESE COLUMNS ARE DISPLAYED:
 
-      1. Serial
-      2. Job Type
-      3. Company/Site
-      4. Location
-      5. Dates
-      6. Status
+      Serial
+      Job Type
+      Company/Site
+      Location
+      Dates
+      Status
 
-      REMOVED:
-      - Applicant
-      - Vessel/Project
-      - Open button column
+      Applicant:
+      - Searchable
+      - Not displayed
 
-      Applicant and Vessel/Project remain searchable
-      through the search logic above.
+      Vessel/Project:
+      - Searchable
+      - Not displayed
       */}
 
-      <div className="w-full overflow-x-auto border-t border-slate-200">
-        {visiblePermits.length === 0 ? (
+      <div className="w-full overflow-x-auto">
+        {visiblePermits.length ===
+        0 ? (
           <div className="py-8 text-center text-sm text-slate-500">
             No permits match your search.
           </div>
@@ -336,67 +386,62 @@ export function PermitTable({
             "
           >
             {/*
-            ========================================================
-            FIXED COLUMN WIDTHS
-
-            These widths ensure the header and body
-            remain aligned.
-            ========================================================
+            Fixed widths make every row align
+            exactly underneath the headers.
             */}
 
             <colgroup>
               <col style={{ width: "18%" }} />
+
               <col style={{ width: "14%" }} />
+
               <col style={{ width: "20%" }} />
+
               <col style={{ width: "17%" }} />
+
               <col style={{ width: "18%" }} />
+
               <col style={{ width: "13%" }} />
             </colgroup>
 
-            {/*
-            ========================================================
-            TABLE HEADER
-            ========================================================
-            */}
-
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
-                <TableHeader
+                <SortableHeader
                   label="Serial"
                   sortKey="serial_no"
                   sort={sort}
                   onSort={toggleSort}
                 />
 
-                <TableHeader
+                <SortableHeader
                   label="Job Type"
                   sortKey="job_type"
                   sort={sort}
                   onSort={toggleSort}
                 />
 
-                <TableHeader
+                <SortableHeader
                   label="Company/Site"
                   sortKey="company_site"
                   sort={sort}
                   onSort={toggleSort}
                 />
 
-                <TableHeader
+                <SortableHeader
                   label="Location"
                   sortKey="location_of_work"
                   sort={sort}
                   onSort={toggleSort}
                 />
 
-                <TableHeader
+                <SortableHeader
                   label="Dates"
                   sortKey="date_commencement"
                   sort={sort}
                   onSort={toggleSort}
                 />
 
-                <TableHeader
+                <SortableHeader
                   label="Status"
                   sortKey="state"
                   sort={sort}
@@ -404,12 +449,6 @@ export function PermitTable({
                 />
               </tr>
             </thead>
-
-            {/*
-            ========================================================
-            TABLE BODY
-            ========================================================
-            */}
 
             <tbody className="divide-y divide-slate-200">
               {visiblePermits.map(
@@ -419,85 +458,54 @@ export function PermitTable({
                 }) => (
                   <tr
                     key={p.id}
+                    className="
+                      cursor-pointer
+                      hover:bg-slate-50
+                    "
                     onClick={() => {
                       window.location.href =
                         `/permits/${p.id}`;
                     }}
-                    className="
-                      cursor-pointer
-                      transition-colors
-                      hover:bg-slate-50
-                    "
                   >
-                    {/*
-                    ==================================================
-                    1. SERIAL
-                    ==================================================
-                    */}
+                    {/* SERIAL */}
 
                     <td className="px-4 py-3 align-middle">
-                      <span
-                        className="
-                          whitespace-nowrap
-                          font-mono
-                          text-xs
-                          text-slate-500
-                        "
-                      >
+                      <span className="whitespace-nowrap font-mono text-xs text-slate-500">
                         {p.serial_no}
                       </span>
                     </td>
 
-                    {/*
-                    ==================================================
-                    2. JOB TYPE
-                    ==================================================
-                    */}
+                    {/* JOB TYPE */}
 
                     <td className="px-4 py-3 align-middle">
                       <span className="font-medium text-slate-900">
-                        {p.job_type || "—"}
+                        {p.job_type ||
+                          "—"}
                       </span>
                     </td>
 
-                    {/*
-                    ==================================================
-                    3. COMPANY / SITE
-                    ==================================================
-                    */}
+                    {/* COMPANY / SITE */}
 
                     <td className="px-4 py-3 align-middle">
                       <span
-                        className="
-                          block
-                          truncate
-                          text-slate-600
-                        "
+                        className="block truncate text-slate-600"
                         title={
-                          companySite ||
-                          undefined
+                          companySite
                         }
                       >
-                        {companySite || "—"}
+                        {companySite ||
+                          "—"}
                       </span>
                     </td>
 
-                    {/*
-                    ==================================================
-                    4. LOCATION
-                    ==================================================
-                    */}
+                    {/* LOCATION */}
 
                     <td className="px-4 py-3 align-middle">
                       <span
-                        className="
-                          block
-                          truncate
-                          text-slate-600
-                        "
+                        className="block truncate text-slate-600"
                         title={
                           p.location_of_work ||
-                          undefined
+                          ""
                         }
                       >
                         {p.location_of_work ||
@@ -505,20 +513,10 @@ export function PermitTable({
                       </span>
                     </td>
 
-                    {/*
-                    ==================================================
-                    5. DATES
-                    ==================================================
-                    */}
+                    {/* DATES */}
 
                     <td className="px-4 py-3 align-middle">
-                      <span
-                        className="
-                          whitespace-nowrap
-                          text-xs
-                          text-slate-500
-                        "
-                      >
+                      <span className="whitespace-nowrap text-xs text-slate-500">
                         {formatDate(
                           p.date_commencement,
                         )}
@@ -531,11 +529,7 @@ export function PermitTable({
                       </span>
                     </td>
 
-                    {/*
-                    ==================================================
-                    6. STATUS
-                    ==================================================
-                    */}
+                    {/* STATUS */}
 
                     <td className="px-4 py-3 align-middle">
                       <PermitStatusBadge
@@ -555,26 +549,22 @@ export function PermitTable({
 
 /*
 ============================================================
-TABLE HEADER COMPONENT
-============================================================
-
-Sorting is ONLY available for the 6 visible columns.
-
-There is:
-- NO Applicant sort
-- NO Vessel/Project sort
+SORTABLE TABLE HEADER
 ============================================================
 */
 
-function TableHeader({
+function SortableHeader({
   label,
   sortKey,
   sort,
   onSort,
 }: {
   label: string;
+
   sortKey: SortKey;
+
   sort: SortState;
+
   onSort: (
     key: SortKey,
   ) => void;
@@ -590,7 +580,6 @@ function TableHeader({
         py-3
         text-left
         align-middle
-        font-normal
       "
     >
       <button
@@ -598,26 +587,18 @@ function TableHeader({
         onClick={() =>
           onSort(sortKey)
         }
-        className={`
+        className="
           inline-flex
           items-center
           gap-1.5
           whitespace-nowrap
-          rounded
           text-xs
           font-medium
-          transition-colors
-          ${
-            active
-              ? "text-slate-950"
-              : "text-slate-500 hover:text-slate-950"
-          }
-        `}
-        title={`Sort by ${label}`}
+          text-slate-500
+          hover:text-slate-950
+        "
       >
-        <span>
-          {label}
-        </span>
+        {label}
 
         {active ? (
           sort?.direction ===
@@ -636,7 +617,7 @@ function TableHeader({
 
 /*
 ============================================================
-COMPANY / SITE FORMATTER
+COMPANY / SITE
 ============================================================
 */
 
@@ -663,10 +644,10 @@ function formatCompanySite(
 
 /*
 ============================================================
-APPLICANT FORMATTER
+APPLICANT
 
-Used ONLY for searching.
-Never rendered in the table.
+Used for SEARCH ONLY.
+Not rendered in table.
 ============================================================
 */
 
@@ -682,9 +663,7 @@ function formatApplicant(
 
 /*
 ============================================================
-SORT VALUE
-
-Only visible columns can be sorted.
+SORT VALUES
 ============================================================
 */
 
@@ -695,10 +674,14 @@ function sortValue(
 ) {
   switch (key) {
     case "serial_no":
-      return permit.serial_no || "";
+      return (
+        permit.serial_no || ""
+      );
 
     case "job_type":
-      return permit.job_type || "";
+      return (
+        permit.job_type || ""
+      );
 
     case "company_site":
       return companySite;
@@ -716,7 +699,9 @@ function sortValue(
       );
 
     case "state":
-      return permit.state || "";
+      return (
+        permit.state || ""
+      );
 
     default:
       return "";
