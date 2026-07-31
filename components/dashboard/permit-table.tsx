@@ -168,22 +168,25 @@ export function PermitTable({
       ) : null}
 
       {/*
-        SINGLE LAYOUT FOR ALL SCREEN SIZES — this is a row list, not a wide
-        <table>. It never needs horizontal scrolling because it never lays
-        columns out side by side beyond what fits: only 3 fixed columns
-        (identity block, dates, status/action), and the identity block
-        wraps everything else (serial no, job type, company/site, vessel,
-        location, applicant) as stacked text inside itself.
+        Column widths are shared by the header row and every body row via
+        GRID_COLUMNS, so each header label sits directly above its content
+        (Serial / Job Type / Company-Site / Location / Dates / Status / Open).
+        Applicant and Vessel/Project are intentionally left out of this view
+        for now to keep the row compact.
+        Below `sm`, columns collapse back into a stacked card per row.
       */}
       <div className="border-t border-slate-200">
-        {/* Sort bar - compact, wraps on small screens instead of forcing scroll */}
-        <div className="flex flex-wrap gap-x-4 gap-y-1 border-b border-slate-200 bg-slate-50/70 px-3 py-2 text-xs">
+        {/* Header row - only shown at sm+ where columns actually align */}
+        <div
+          className={`hidden border-b border-slate-200 bg-slate-50/70 px-3 py-2 text-xs sm:grid sm:items-center ${GRID_COLUMNS}`}
+        >
           <SortChip label="Serial" sortKey="serial_no" sort={sort} onSort={toggleSort} />
           <SortChip label="Job Type" sortKey="job_type" sort={sort} onSort={toggleSort} />
           <SortChip label="Company/Site" sortKey="company_site" sort={sort} onSort={toggleSort} />
           <SortChip label="Location" sortKey="location_of_work" sort={sort} onSort={toggleSort} />
           <SortChip label="Dates" sortKey="date_commencement" sort={sort} onSort={toggleSort} />
           <SortChip label="Status" sortKey="state" sort={sort} onSort={toggleSort} />
+          <span aria-hidden className="block" />
         </div>
 
         {visiblePermits.length === 0 ? (
@@ -196,29 +199,25 @@ export function PermitTable({
               <Link
                 key={p.id}
                 href={`/permits/${p.id}`}
-                className="grid grid-cols-1 gap-2 px-3 py-3 hover:bg-slate-50/60 sm:grid-cols-[1fr_auto_auto_auto] sm:items-center sm:gap-4"
+                className={`grid grid-cols-1 gap-1 px-3 py-3 hover:bg-slate-50/60 sm:items-center sm:gap-4 ${GRID_COLUMNS}`}
               >
-                {/* Identity block: everything that used to be 6 separate
-                    columns now stacks here, so it never pushes the row
-                    wider than the container. */}
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-baseline gap-x-2">
-                    <span className="font-mono text-xs text-slate-500">
-                      {p.serial_no}
-                    </span>
-                  </div>
-
-                  <div className="truncate font-medium text-slate-900">
-                    {p.job_type || "—"}
-                  </div>
-
-                  <div className="truncate text-xs text-slate-500">
-                    {companySite}
-                    {p.location_of_work ? ` · ${p.location_of_work}` : ""}
-                  </div>
+                <div className="min-w-0 font-mono text-xs text-slate-500 sm:truncate">
+                  {p.serial_no}
                 </div>
 
-                <div className="text-xs text-slate-500 sm:whitespace-nowrap sm:text-right">
+                <div className="min-w-0 truncate font-medium text-slate-900">
+                  {p.job_type || "—"}
+                </div>
+
+                <div className="min-w-0 truncate text-sm text-slate-600">
+                  {companySite}
+                </div>
+
+                <div className="min-w-0 truncate text-sm text-slate-600">
+                  {p.location_of_work || "—"}
+                </div>
+
+                <div className="text-xs text-slate-500 sm:whitespace-nowrap">
                   {formatDate(p.date_commencement)} →{" "}
                   {formatDate(p.date_completion)}
                 </div>
@@ -227,7 +226,7 @@ export function PermitTable({
                   <PermitStatusBadge state={p.state} />
                 </div>
 
-                <div className="flex items-center justify-end gap-1 text-sm font-medium text-blue-600">
+                <div className="flex items-center gap-1 text-sm font-medium text-blue-600 sm:justify-self-end">
                   Open <ChevronRight className="h-4 w-4" />
                 </div>
               </Link>
@@ -238,6 +237,13 @@ export function PermitTable({
     </div>
   );
 }
+
+// Shared column template so the header row and every body row line up
+// under the same grid — this is what makes it read as a table rather than
+// a list of independently-sized rows. Applicant and Vessel/Project are
+// left out of the column set for now; add columns here if they come back.
+const GRID_COLUMNS =
+  "sm:grid-cols-[minmax(120px,140px)_minmax(90px,110px)_minmax(160px,1.3fr)_minmax(120px,1fr)_minmax(150px,160px)_minmax(130px,150px)_70px]";
 
 function SortChip({
   label,
