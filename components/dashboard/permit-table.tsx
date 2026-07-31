@@ -382,6 +382,8 @@ export function PermitTable({
               min-w-[1050px]
               table-fixed
               border-collapse
+              border
+              border-slate-300
               text-sm
             "
           >
@@ -405,7 +407,7 @@ export function PermitTable({
             </colgroup>
 
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50">
+              <tr className="border border-slate-300 bg-slate-100">
                 <SortableHeader
                   label="Serial"
                   sortKey="serial_no"
@@ -450,7 +452,7 @@ export function PermitTable({
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-slate-200">
+            <tbody>
               {visiblePermits.map(
                 ({
                   permit: p,
@@ -460,6 +462,8 @@ export function PermitTable({
                     key={p.id}
                     className="
                       cursor-pointer
+                      border
+                      border-slate-300
                       hover:bg-slate-50
                     "
                     onClick={() => {
@@ -469,7 +473,7 @@ export function PermitTable({
                   >
                     {/* SERIAL */}
 
-                    <td className="px-4 py-3 align-middle">
+                    <td className="border border-slate-300 px-4 py-3 align-middle">
                       <span className="whitespace-nowrap font-mono text-xs text-slate-500">
                         {p.serial_no}
                       </span>
@@ -477,7 +481,7 @@ export function PermitTable({
 
                     {/* JOB TYPE */}
 
-                    <td className="px-4 py-3 align-middle">
+                    <td className="border border-slate-300 px-4 py-3 align-middle">
                       <span className="font-medium text-slate-900">
                         {p.job_type ||
                           "—"}
@@ -486,7 +490,7 @@ export function PermitTable({
 
                     {/* COMPANY / SITE */}
 
-                    <td className="px-4 py-3 align-middle">
+                    <td className="border border-slate-300 px-4 py-3 align-middle">
                       <span
                         className="block truncate text-slate-600"
                         title={
@@ -500,7 +504,7 @@ export function PermitTable({
 
                     {/* LOCATION */}
 
-                    <td className="px-4 py-3 align-middle">
+                    <td className="border border-slate-300 px-4 py-3 align-middle">
                       <span
                         className="block truncate text-slate-600"
                         title={
@@ -515,7 +519,7 @@ export function PermitTable({
 
                     {/* DATES */}
 
-                    <td className="px-4 py-3 align-middle">
+                    <td className="border border-slate-300 px-4 py-3 align-middle">
                       <span className="whitespace-nowrap text-xs text-slate-500">
                         {formatDate(
                           p.date_commencement,
@@ -531,7 +535,7 @@ export function PermitTable({
 
                     {/* STATUS */}
 
-                    <td className="px-4 py-3 align-middle">
+                    <td className="border border-slate-300 px-4 py-3 align-middle">
                       <PermitStatusBadge
                         state={p.state}
                       />
@@ -576,6 +580,8 @@ function SortableHeader({
     <th
       scope="col"
       className="
+        border
+        border-slate-300
         px-4
         py-3
         text-left
