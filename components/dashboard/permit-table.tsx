@@ -34,9 +34,7 @@ type SortKey =
   | "serial_no"
   | "job_type"
   | "company_site"
-  | "vessel_project"
   | "location_of_work"
-  | "applicant"
   | "date_commencement"
   | "state";
 
@@ -103,8 +101,8 @@ export function PermitTable({
     }
 
     return filtered.sort((a, b) => {
-      const left = sortValue(a.permit, sort.key, a.companySite, a.applicant);
-      const right = sortValue(b.permit, sort.key, b.companySite, b.applicant);
+      const left = sortValue(a.permit, sort.key, a.companySite);
+      const right = sortValue(b.permit, sort.key, b.companySite);
       const compared = left.localeCompare(right, undefined, {
         numeric: true,
         sensitivity: "base",
@@ -168,84 +166,87 @@ export function PermitTable({
       ) : null}
 
       {/*
-        Column widths are shared by the header row and every body row via
-        GRID_COLUMNS, so each header label sits directly above its content
-        (Serial / Job Type / Company-Site / Location / Dates / Status / Open).
-        Applicant and Vessel/Project are intentionally left out of this view
-        for now to keep the row compact.
-        Below `sm`, columns collapse back into a stacked card per row.
+        Real <table> markup — the browser's own table layout engine lines
+        up every <td> under its <th>, so this can't drift out of alignment
+        the way a hand-tuned grid/flex layout could. Applicant and
+        Vessel/Project are intentionally left out of the column set for
+        now to keep the row compact (still searchable above, just not a
+        column here). Wrapped in overflow-x-auto so on narrow screens it
+        scrolls horizontally instead of squeezing or re-stacking.
       */}
-      <div className="border-t border-slate-200">
-        {/* Header row - only shown at sm+ where columns actually align */}
-        <div
-          className={`hidden border-b border-slate-200 bg-slate-50/70 px-3 py-2 text-xs sm:grid sm:items-center ${GRID_COLUMNS}`}
-        >
-          <SortChip label="Serial" sortKey="serial_no" sort={sort} onSort={toggleSort} />
-          <SortChip label="Job Type" sortKey="job_type" sort={sort} onSort={toggleSort} />
-          <SortChip label="Company/Site" sortKey="company_site" sort={sort} onSort={toggleSort} />
-          <SortChip label="Location" sortKey="location_of_work" sort={sort} onSort={toggleSort} />
-          <SortChip label="Dates" sortKey="date_commencement" sort={sort} onSort={toggleSort} />
-          <SortChip label="Status" sortKey="state" sort={sort} onSort={toggleSort} />
-          <span aria-hidden className="block" />
-        </div>
-
+      <div className="border-t border-slate-200 overflow-x-auto">
         {visiblePermits.length === 0 ? (
           <p className="py-8 text-center text-sm text-slate-500">
             No permits match your search.
           </p>
         ) : (
-          <div className="divide-y divide-slate-200">
-            {visiblePermits.map(({ permit: p, companySite }) => (
-              <Link
-                key={p.id}
-                href={`/permits/${p.id}`}
-                className={`grid grid-cols-1 gap-1 px-3 py-3 hover:bg-slate-50/60 sm:items-center sm:gap-4 ${GRID_COLUMNS}`}
-              >
-                <div className="min-w-0 font-mono text-xs text-slate-500 sm:truncate">
-                  {p.serial_no}
-                </div>
+          <table className="w-full min-w-[860px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/70 text-xs">
+                <Th label="Serial" sortKey="serial_no" sort={sort} onSort={toggleSort} />
+                <Th label="Job Type" sortKey="job_type" sort={sort} onSort={toggleSort} />
+                <Th label="Company/Site" sortKey="company_site" sort={sort} onSort={toggleSort} />
+                <Th label="Location" sortKey="location_of_work" sort={sort} onSort={toggleSort} />
+                <Th label="Dates" sortKey="date_commencement" sort={sort} onSort={toggleSort} />
+                <Th label="Status" sortKey="state" sort={sort} onSort={toggleSort} />
+                <th className="w-16 px-3 py-2" aria-hidden />
+              </tr>
+            </thead>
 
-                <div className="min-w-0 truncate font-medium text-slate-900">
-                  {p.job_type || "—"}
-                </div>
+            <tbody className="divide-y divide-slate-200">
+              {visiblePermits.map(({ permit: p, companySite }) => (
+                <tr
+                  key={p.id}
+                  className="cursor-pointer hover:bg-slate-50/60"
+                  onClick={() => {
+                    window.location.href = `/permits/${p.id}`;
+                  }}
+                >
+                  <td className="px-3 py-3 align-middle font-mono text-xs text-slate-500 whitespace-nowrap">
+                    {p.serial_no}
+                  </td>
 
-                <div className="min-w-0 truncate text-sm text-slate-600">
-                  {companySite}
-                </div>
+                  <td className="px-3 py-3 align-middle font-medium text-slate-900">
+                    {p.job_type || "—"}
+                  </td>
 
-                <div className="min-w-0 truncate text-sm text-slate-600">
-                  {p.location_of_work || "—"}
-                </div>
+                  <td className="px-3 py-3 align-middle text-slate-600">
+                    {companySite}
+                  </td>
 
-                <div className="text-xs text-slate-500 sm:whitespace-nowrap">
-                  {formatDate(p.date_commencement)} →{" "}
-                  {formatDate(p.date_completion)}
-                </div>
+                  <td className="px-3 py-3 align-middle text-slate-600">
+                    {p.location_of_work || "—"}
+                  </td>
 
-                <div className="sm:justify-self-start">
-                  <PermitStatusBadge state={p.state} />
-                </div>
+                  <td className="px-3 py-3 align-middle text-xs text-slate-500 whitespace-nowrap">
+                    {formatDate(p.date_commencement)} →{" "}
+                    {formatDate(p.date_completion)}
+                  </td>
 
-                <div className="flex items-center gap-1 text-sm font-medium text-blue-600 sm:justify-self-end">
-                  Open <ChevronRight className="h-4 w-4" />
-                </div>
-              </Link>
-            ))}
-          </div>
+                  <td className="px-3 py-3 align-middle">
+                    <PermitStatusBadge state={p.state} />
+                  </td>
+
+                  <td className="px-3 py-3 align-middle text-right">
+                    <Link
+                      href={`/permits/${p.id}`}
+                      onClick={(event) => event.stopPropagation()}
+                      className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline"
+                    >
+                      Open <ChevronRight className="h-4 w-4" />
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
     </div>
   );
 }
 
-// Shared column template so the header row and every body row line up
-// under the same grid — this is what makes it read as a table rather than
-// a list of independently-sized rows. Applicant and Vessel/Project are
-// left out of the column set for now; add columns here if they come back.
-const GRID_COLUMNS =
-  "sm:grid-cols-[minmax(120px,140px)_minmax(90px,110px)_minmax(160px,1.3fr)_minmax(120px,1fr)_minmax(150px,160px)_minmax(130px,150px)_70px]";
-
-function SortChip({
+function Th({
   label,
   sortKey,
   sort,
@@ -259,25 +260,27 @@ function SortChip({
   const active = sort?.key === sortKey;
 
   return (
-    <button
-      type="button"
-      onClick={() => onSort(sortKey)}
-      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:text-slate-950 ${
-        active ? "font-semibold text-slate-950" : "text-slate-500"
-      }`}
-      title={`Sort by ${label}`}
-    >
-      {label}
-      {active ? (
-        sort!.direction === "asc" ? (
-          <ArrowUp className="h-3 w-3" />
+    <th className="px-3 py-2 text-left font-normal">
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:text-slate-950 ${
+          active ? "font-semibold text-slate-950" : "text-slate-500"
+        }`}
+        title={`Sort by ${label}`}
+      >
+        {label}
+        {active ? (
+          sort!.direction === "asc" ? (
+            <ArrowUp className="h-3 w-3" />
+          ) : (
+            <ArrowDown className="h-3 w-3" />
+          )
         ) : (
-          <ArrowDown className="h-3 w-3" />
-        )
-      ) : (
-        <ArrowUpDown className="h-3 w-3 text-slate-300" />
-      )}
-    </button>
+          <ArrowUpDown className="h-3 w-3 text-slate-300" />
+        )}
+      </button>
+    </th>
   );
 }
 
@@ -301,12 +304,7 @@ function formatApplicant(p: PermitTableRow) {
   return p.display_applicant_name || p.applicant?.full_name || "—";
 }
 
-function sortValue(
-  permit: PermitTableRow,
-  key: SortKey,
-  companySite: string,
-  applicant: string,
-) {
+function sortValue(permit: PermitTableRow, key: SortKey, companySite: string) {
   switch (key) {
     case "serial_no":
       return permit.serial_no || "";
@@ -314,12 +312,8 @@ function sortValue(
       return permit.job_type || "";
     case "company_site":
       return companySite;
-    case "vessel_project":
-      return permit.vessel_project || "";
     case "location_of_work":
       return permit.location_of_work || "";
-    case "applicant":
-      return applicant;
     case "date_commencement":
       return permit.date_commencement || "";
     case "state":
