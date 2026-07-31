@@ -5,7 +5,7 @@ import { listPermits } from "@/lib/permits/queries";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty";
-import { PermitTable } from "@/components/dashboard/permit-table";
+import { PermitsExplorer } from "@/components/dashboard/permits-explorer";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +56,7 @@ export default async function PermitsPage() {
               className="border-0"
             />
           ) : (
-            <PermitTable permits={permits} searchable />
+            <PermitsExplorer permits={permits} />
           )}
         </CardBody>
       </Card>
