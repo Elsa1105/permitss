@@ -121,24 +121,25 @@ export function PermitsExplorer({ permits }: PermitsExplorerProps) {
 
   return (
     <div className="w-full">
-      {/* FILTER BAR — grid row, Excel-style borders on every cell */}
-      <div className="border border-slate-300 bg-slate-100">
-        <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr_1.4fr]">
-          <div className="relative border border-slate-300">
+      {/* FILTER BAR — flat, soft shading, thin divider (no boxed grid) */}
+      <div className="border-b border-slate-200 bg-slate-50 px-3 py-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="relative min-w-[200px] flex-1">
+            <span className="sr-only">Search permits</span>
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search..."
-              className="h-10 w-full border-0 bg-transparent pl-9 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-inset focus:ring-slate-400"
+              className="h-9 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300"
             />
-          </div>
+          </label>
 
           <select
             value={jobType}
             onChange={(e) => setJobType(e.target.value)}
-            className="h-10 border border-slate-300 bg-transparent px-3 text-sm focus:outline-none focus:ring-1 focus:ring-inset focus:ring-slate-400"
+            className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-300"
           >
             {jobTypeOptions.map((o) => (
               <option key={o.value} value={o.value}>
@@ -150,7 +151,7 @@ export function PermitsExplorer({ permits }: PermitsExplorerProps) {
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            className="h-10 border border-slate-300 bg-transparent px-3 text-sm focus:outline-none focus:ring-1 focus:ring-inset focus:ring-slate-400"
+            className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-300"
           >
             {statusOptions.map((o) => (
               <option key={o.value} value={o.value}>
@@ -162,7 +163,7 @@ export function PermitsExplorer({ permits }: PermitsExplorerProps) {
           <select
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-            className="h-10 border border-slate-300 bg-transparent px-3 text-sm focus:outline-none focus:ring-1 focus:ring-inset focus:ring-slate-400"
+            className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-300"
           >
             {DATE_FILTER_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -171,35 +172,36 @@ export function PermitsExplorer({ permits }: PermitsExplorerProps) {
             ))}
           </select>
 
-          <input
-            type="search"
-            value={applicantVessel}
-            onChange={(e) => setApplicantVessel(e.target.value)}
-            placeholder="Applicant/Vessel Search..."
-            className="h-10 border border-slate-300 bg-transparent px-3 text-sm focus:outline-none focus:ring-1 focus:ring-inset focus:ring-slate-400"
-          />
+          <label className="relative min-w-[200px] flex-1">
+            <span className="sr-only">Search applicant or vessel</span>
+            <input
+              type="search"
+              value={applicantVessel}
+              onChange={(e) => setApplicantVessel(e.target.value)}
+              placeholder="Applicant/Vessel Search..."
+              className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300"
+            />
+          </label>
         </div>
 
-        <div className="border border-slate-300 border-t-0 bg-white px-3 py-1.5">
-          <p className="text-xs text-slate-500">
-            {filteredPermits.length} of {permits.length} permits shown.
-            {hasActiveFilters ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setQuery("");
-                  setJobType("all");
-                  setStatus("all");
-                  setDateFilter("all");
-                  setApplicantVessel("");
-                }}
-                className="ml-2 font-medium text-slate-700 underline hover:text-slate-950"
-              >
-                Clear filters
-              </button>
-            ) : null}
-          </p>
-        </div>
+        <p className="mt-1.5 text-xs text-slate-500">
+          {filteredPermits.length} of {permits.length} permits shown.
+          {hasActiveFilters ? (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setJobType("all");
+                setStatus("all");
+                setDateFilter("all");
+                setApplicantVessel("");
+              }}
+              className="ml-2 font-medium text-slate-700 underline hover:text-slate-950"
+            >
+              Clear filters
+            </button>
+          ) : null}
+        </p>
       </div>
 
       {/* TABLE */}
