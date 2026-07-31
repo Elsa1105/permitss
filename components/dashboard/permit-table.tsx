@@ -1,15 +1,8 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
-import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  ChevronRight,
-  Search,
-  X,
-} from "lucide-react";
+import { Search, X, ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+
 import { PermitStatusBadge } from "@/components/permit/status-badge";
 import { formatDate } from "@/lib/utils";
 import type { PermitWithJoins } from "@/lib/supabase/types";
@@ -18,11 +11,13 @@ type PermitTableRow = PermitWithJoins & {
   job_type?: string | null;
   display_applicant_name?: string | null;
   display_applicant_department?: string | null;
+
   company?: {
     id: string;
     code: string;
     name: string;
   } | null;
+
   site?: {
     id: string;
     code: string;
@@ -60,28 +55,49 @@ export function PermitTable({
   const [query, setQuery] = React.useState("");
   const [sort, setSort] = React.useState<SortState>(null);
 
+  /*
+  ============================================================
+  FILTER + SEARCH + SORT
+  ============================================================
+
+  Applicant and Vessel/Project:
+  - NOT displayed in table
+  - STILL searchable
+  - NO sorting buttons
+  */
+
   const visiblePermits = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
     const rows = permits.map((permit, index) => {
       const p = permit as PermitTableRow;
+
       const companySite = formatCompanySite(p);
+
       const applicant = formatApplicant(p);
 
-      // Applicant and Vessel/Project are intentionally NOT displayed
-      // in the table, but remain searchable through this combined text.
+      /*
+      Applicant and Vessel/Project are intentionally included
+      ONLY in searchText.
+
+      They will NOT be rendered as table columns.
+      */
+
       const searchText = [
+        // Visible table fields
         p.serial_no,
         p.job_type,
         companySite,
-        p.vessel_project,
         p.location_of_work,
-        applicant,
-        p.display_applicant_department,
         p.date_commencement,
         p.date_completion,
         p.state,
-        p.state.replaceAll("_", " "),
+        p.state?.replaceAll("_", " "),
+
+        // Hidden searchable fields
+        p.vessel_project,
+        applicant,
+        p.display_applicant_department,
       ]
         .filter(Boolean)
         .join(" ")
@@ -95,130 +111,292 @@ export function PermitTable({
       };
     });
 
-    const filtered = normalizedQuery
-      ? rows.filter((row) => row.searchText.includes(normalizedQuery))
+    /*
+    ============================================================
+    SEARCH
+    ============================================================
+    */
+
+    const filteredRows = normalizedQuery
+      ? rows.filter((row) =>
+          row.searchText.includes(normalizedQuery),
+        )
       : rows;
 
+    /*
+    ============================================================
+    DEFAULT ORDER
+    ============================================================
+    */
+
     if (!sort) {
-      return [...filtered].sort(
-        (a, b) => a.originalIndex - b.originalIndex,
-      );
+      return filteredRows;
     }
 
-    return [...filtered].sort((a, b) => {
-      const left = sortValue(a.permit, sort.key, a.companySite);
-      const right = sortValue(b.permit, sort.key, b.companySite);
-      const compared = left.localeCompare(right, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      });
+    /*
+    ============================================================
+    SORT
+    ============================================================
+    */
+
+    return [...filteredRows].sort((a, b) => {
+      const left = sortValue(
+        a.permit,
+        sort.key,
+        a.companySite,
+      );
+
+      const right = sortValue(
+        b.permit,
+        sort.key,
+        b.companySite,
+      );
+
+      const compared = left.localeCompare(
+        right,
+        undefined,
+        {
+          numeric: true,
+          sensitivity: "base",
+        },
+      );
 
       if (compared === 0) {
-        return a.originalIndex - b.originalIndex;
+        return (
+          a.originalIndex -
+          b.originalIndex
+        );
       }
 
-      return sort.direction === "asc" ? compared : -compared;
+      return sort.direction === "asc"
+        ? compared
+        : -compared;
     });
   }, [permits, query, sort]);
 
+  /*
+  ============================================================
+  SORT HANDLER
+  ============================================================
+  */
+
   function toggleSort(key: SortKey) {
     setSort((current) => {
-      if (!current || current.key !== key) {
-        return { key, direction: "asc" };
+      /*
+      First click:
+      ASC
+      */
+
+      if (
+        !current ||
+        current.key !== key
+      ) {
+        return {
+          key,
+          direction: "asc",
+        };
       }
 
-      if (current.direction === "asc") {
-        return { key, direction: "desc" };
+      /*
+      Second click:
+      DESC
+      */
+
+      if (
+        current.direction === "asc"
+      ) {
+        return {
+          key,
+          direction: "desc",
+        };
       }
+
+      /*
+      Third click:
+      RESET
+      */
 
       return null;
     });
   }
 
   return (
-    <div>
-      {searchable ? (
+    <div className="w-full">
+      {/*
+      ============================================================
+      SEARCH BAR
+      ============================================================
+      */}
+
+      {searchable && (
         <div className="border-b border-slate-200 bg-slate-50/70 p-3">
           <label className="relative block max-w-xl">
-            <span className="sr-only">Search permits</span>
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <span className="sr-only">
+              Search permits
+            </span>
+
+            <Search
+              className="
+                pointer-events-none
+                absolute
+                left-3
+                top-1/2
+                h-4
+                w-4
+                -translate-y-1/2
+                text-slate-400
+              "
+            />
 
             <input
               type="search"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) =>
+                setQuery(event.target.value)
+              }
               placeholder={searchPlaceholder}
               className="input w-full pl-9 pr-10"
             />
 
-            {query ? (
+            {query && (
               <button
                 type="button"
-                onClick={() => setQuery("")}
-                className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded text-slate-500 hover:bg-slate-200 hover:text-slate-800"
+                onClick={() =>
+                  setQuery("")
+                }
+                className="
+                  absolute
+                  right-2
+                  top-1/2
+                  inline-flex
+                  h-7
+                  w-7
+                  -translate-y-1/2
+                  items-center
+                  justify-center
+                  rounded
+                  text-slate-500
+                  hover:bg-slate-200
+                  hover:text-slate-800
+                "
                 aria-label="Clear permit search"
               >
                 <X className="h-4 w-4" />
               </button>
-            ) : null}
+            )}
           </label>
 
           <p className="mt-1.5 text-xs text-slate-500">
-            {visiblePermits.length} of {permits.length} permit
-            {permits.length === 1 ? "" : "s"} shown.
+            {visiblePermits.length} of{" "}
+            {permits.length} permit
+            {permits.length === 1
+              ? ""
+              : "s"}{" "}
+            shown.
           </p>
         </div>
-      ) : null}
+      )}
 
-      <div className="overflow-x-auto border-t border-slate-200">
+      {/*
+      ============================================================
+      TABLE
+      ============================================================
+
+      EXACTLY 6 VISIBLE COLUMNS:
+
+      1. Serial
+      2. Job Type
+      3. Company/Site
+      4. Location
+      5. Dates
+      6. Status
+
+      REMOVED:
+      - Applicant
+      - Vessel/Project
+      - Open button column
+
+      Applicant and Vessel/Project remain searchable
+      through the search logic above.
+      */}
+
+      <div className="w-full overflow-x-auto border-t border-slate-200">
         {visiblePermits.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-500">
+          <div className="py-8 text-center text-sm text-slate-500">
             No permits match your search.
-          </p>
+          </div>
         ) : (
-          <table className="w-full min-w-[1100px] table-fixed border-collapse text-sm">
+          <table
+            className="
+              w-full
+              min-w-[1050px]
+              table-fixed
+              border-collapse
+              text-sm
+            "
+          >
+            {/*
+            ========================================================
+            FIXED COLUMN WIDTHS
+
+            These widths ensure the header and body
+            remain aligned.
+            ========================================================
+            */}
+
             <colgroup>
-              <col className="w-[18%]" />
-              <col className="w-[14%]" />
-              <col className="w-[20%]" />
-              <col className="w-[18%]" />
-              <col className="w-[18%]" />
-              <col className="w-[12%]" />
+              <col style={{ width: "18%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "20%" }} />
+              <col style={{ width: "17%" }} />
+              <col style={{ width: "18%" }} />
+              <col style={{ width: "13%" }} />
             </colgroup>
 
+            {/*
+            ========================================================
+            TABLE HEADER
+            ========================================================
+            */}
+
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/70 text-xs">
-                <Th
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <TableHeader
                   label="Serial"
                   sortKey="serial_no"
                   sort={sort}
                   onSort={toggleSort}
                 />
-                <Th
+
+                <TableHeader
                   label="Job Type"
                   sortKey="job_type"
                   sort={sort}
                   onSort={toggleSort}
                 />
-                <Th
+
+                <TableHeader
                   label="Company/Site"
                   sortKey="company_site"
                   sort={sort}
                   onSort={toggleSort}
                 />
-                <Th
+
+                <TableHeader
                   label="Location"
                   sortKey="location_of_work"
                   sort={sort}
                   onSort={toggleSort}
                 />
-                <Th
+
+                <TableHeader
                   label="Dates"
                   sortKey="date_commencement"
                   sort={sort}
                   onSort={toggleSort}
                 />
-                <Th
+
+                <TableHeader
                   label="Status"
                   sortKey="state"
                   sort={sort}
@@ -227,48 +405,146 @@ export function PermitTable({
               </tr>
             </thead>
 
+            {/*
+            ========================================================
+            TABLE BODY
+            ========================================================
+            */}
+
             <tbody className="divide-y divide-slate-200">
-              {visiblePermits.map(({ permit: p, companySite }) => (
-                <tr
-                  key={p.id}
-                  className="cursor-pointer hover:bg-slate-50/60"
-                  onClick={() => {
-                    window.location.href = `/permits/${p.id}`;
-                  }}
-                >
-                  <td className="whitespace-nowrap px-3 py-3 align-middle font-mono text-xs text-slate-500">
-                    {p.serial_no}
-                  </td>
+              {visiblePermits.map(
+                ({
+                  permit: p,
+                  companySite,
+                }) => (
+                  <tr
+                    key={p.id}
+                    onClick={() => {
+                      window.location.href =
+                        `/permits/${p.id}`;
+                    }}
+                    className="
+                      cursor-pointer
+                      transition-colors
+                      hover:bg-slate-50
+                    "
+                  >
+                    {/*
+                    ==================================================
+                    1. SERIAL
+                    ==================================================
+                    */}
 
-                  <td className="px-3 py-3 align-middle font-medium text-slate-900">
-                    {p.job_type || "—"}
-                  </td>
+                    <td className="px-4 py-3 align-middle">
+                      <span
+                        className="
+                          whitespace-nowrap
+                          font-mono
+                          text-xs
+                          text-slate-500
+                        "
+                      >
+                        {p.serial_no}
+                      </span>
+                    </td>
 
-                  <td className="px-3 py-3 align-middle text-slate-600">
-                    <span className="block truncate" title={companySite}>
-                      {companySite}
-                    </span>
-                  </td>
+                    {/*
+                    ==================================================
+                    2. JOB TYPE
+                    ==================================================
+                    */}
 
-                  <td className="px-3 py-3 align-middle text-slate-600">
-                    <span
-                      className="block truncate"
-                      title={p.location_of_work || ""}
-                    >
-                      {p.location_of_work || "—"}
-                    </span>
-                  </td>
+                    <td className="px-4 py-3 align-middle">
+                      <span className="font-medium text-slate-900">
+                        {p.job_type || "—"}
+                      </span>
+                    </td>
 
-                  <td className="whitespace-nowrap px-3 py-3 align-middle text-xs text-slate-500">
-                    {formatDate(p.date_commencement)} →{" "}
-                    {formatDate(p.date_completion)}
-                  </td>
+                    {/*
+                    ==================================================
+                    3. COMPANY / SITE
+                    ==================================================
+                    */}
 
-                  <td className="px-3 py-3 align-middle">
-                    <PermitStatusBadge state={p.state} />
-                  </td>
-                </tr>
-              ))}
+                    <td className="px-4 py-3 align-middle">
+                      <span
+                        className="
+                          block
+                          truncate
+                          text-slate-600
+                        "
+                        title={
+                          companySite ||
+                          undefined
+                        }
+                      >
+                        {companySite || "—"}
+                      </span>
+                    </td>
+
+                    {/*
+                    ==================================================
+                    4. LOCATION
+                    ==================================================
+                    */}
+
+                    <td className="px-4 py-3 align-middle">
+                      <span
+                        className="
+                          block
+                          truncate
+                          text-slate-600
+                        "
+                        title={
+                          p.location_of_work ||
+                          undefined
+                        }
+                      >
+                        {p.location_of_work ||
+                          "—"}
+                      </span>
+                    </td>
+
+                    {/*
+                    ==================================================
+                    5. DATES
+                    ==================================================
+                    */}
+
+                    <td className="px-4 py-3 align-middle">
+                      <span
+                        className="
+                          whitespace-nowrap
+                          text-xs
+                          text-slate-500
+                        "
+                      >
+                        {formatDate(
+                          p.date_commencement,
+                        )}
+
+                        {" → "}
+
+                        {formatDate(
+                          p.date_completion,
+                        )}
+                      </span>
+                    </td>
+
+                    {/*
+                    ==================================================
+                    6. STATUS
+                    ==================================================
+                    */}
+
+                    <td className="px-4 py-3 align-middle">
+                      <PermitStatusBadge
+                        state={p.state}
+                      />
+                    </td>
+                  </tr>
+                ),
+              )}
             </tbody>
           </table>
         )}
@@ -277,7 +553,20 @@ export function PermitTable({
   );
 }
 
-function Th({
+/*
+============================================================
+TABLE HEADER COMPONENT
+============================================================
+
+Sorting is ONLY available for the 6 visible columns.
+
+There is:
+- NO Applicant sort
+- NO Vessel/Project sort
+============================================================
+*/
+
+function TableHeader({
   label,
   sortKey,
   sort,
@@ -286,37 +575,78 @@ function Th({
   label: string;
   sortKey: SortKey;
   sort: SortState;
-  onSort: (key: SortKey) => void;
+  onSort: (
+    key: SortKey,
+  ) => void;
 }) {
-  const active = sort?.key === sortKey;
+  const active =
+    sort?.key === sortKey;
 
   return (
-    <th className="px-3 py-2 text-left font-normal">
+    <th
+      scope="col"
+      className="
+        px-4
+        py-3
+        text-left
+        align-middle
+        font-normal
+      "
+    >
       <button
         type="button"
-        onClick={() => onSort(sortKey)}
-        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:text-slate-950 ${
-          active ? "font-semibold text-slate-950" : "text-slate-500"
-        }`}
+        onClick={() =>
+          onSort(sortKey)
+        }
+        className={`
+          inline-flex
+          items-center
+          gap-1.5
+          whitespace-nowrap
+          rounded
+          text-xs
+          font-medium
+          transition-colors
+          ${
+            active
+              ? "text-slate-950"
+              : "text-slate-500 hover:text-slate-950"
+          }
+        `}
         title={`Sort by ${label}`}
       >
-        {label}
+        <span>
+          {label}
+        </span>
+
         {active ? (
-          sort!.direction === "asc" ? (
-            <ArrowUp className="h-3 w-3" />
+          sort?.direction ===
+          "asc" ? (
+            <ArrowUp className="h-3.5 w-3.5" />
           ) : (
-            <ArrowDown className="h-3 w-3" />
+            <ArrowDown className="h-3.5 w-3.5" />
           )
         ) : (
-          <ArrowUpDown className="h-3 w-3 text-slate-300" />
+          <ArrowUpDown className="h-3.5 w-3.5 text-slate-300" />
         )}
       </button>
     </th>
   );
 }
 
-function formatCompanySite(p: PermitTableRow) {
-  if (p.company && p.site) {
+/*
+============================================================
+COMPANY / SITE FORMATTER
+============================================================
+*/
+
+function formatCompanySite(
+  p: PermitTableRow,
+) {
+  if (
+    p.company &&
+    p.site
+  ) {
     return `${p.company.code} / ${p.site.code} - ${p.site.name}`;
   }
 
@@ -331,23 +661,64 @@ function formatCompanySite(p: PermitTableRow) {
   return "—";
 }
 
-function formatApplicant(p: PermitTableRow) {
-  return p.display_applicant_name || p.applicant?.full_name || "—";
+/*
+============================================================
+APPLICANT FORMATTER
+
+Used ONLY for searching.
+Never rendered in the table.
+============================================================
+*/
+
+function formatApplicant(
+  p: PermitTableRow,
+) {
+  return (
+    p.display_applicant_name ||
+    p.applicant?.full_name ||
+    "—"
+  );
 }
 
-function sortValue(permit: PermitTableRow, key: SortKey, companySite: string) {
+/*
+============================================================
+SORT VALUE
+
+Only visible columns can be sorted.
+============================================================
+*/
+
+function sortValue(
+  permit: PermitTableRow,
+  key: SortKey,
+  companySite: string,
+) {
   switch (key) {
     case "serial_no":
       return permit.serial_no || "";
+
     case "job_type":
       return permit.job_type || "";
+
     case "company_site":
       return companySite;
+
     case "location_of_work":
-      return permit.location_of_work || "";
+      return (
+        permit.location_of_work ||
+        ""
+      );
+
     case "date_commencement":
-      return permit.date_commencement || "";
+      return (
+        permit.date_commencement ||
+        ""
+      );
+
     case "state":
       return permit.state || "";
+
+    default:
+      return "";
   }
 }
