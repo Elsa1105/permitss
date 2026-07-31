@@ -379,29 +379,14 @@ export function PermitTable({
           <table
             className="
               w-full
-              min-w-[1050px]
-              table-fixed
+              table-auto
               text-sm
             "
           >
             {/*
-            Fixed widths make every row align
-            exactly underneath the headers.
+            Auto layout: each column widens to fit
+            its own content, nothing gets clipped.
             */}
-
-            <colgroup>
-              <col style={{ width: "18%" }} />
-
-              <col style={{ width: "14%" }} />
-
-              <col style={{ width: "20%" }} />
-
-              <col style={{ width: "17%" }} />
-
-              <col style={{ width: "18%" }} />
-
-              <col style={{ width: "13%" }} />
-            </colgroup>
 
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
               <tr>
@@ -487,7 +472,7 @@ export function PermitTable({
 
                     <td className="border-t border-slate-100 px-4 py-3 align-middle">
                       <span
-                        className="block truncate text-sm text-slate-700"
+                        className="whitespace-nowrap text-sm text-slate-700"
                         title={
                           companySite
                         }
@@ -501,7 +486,7 @@ export function PermitTable({
 
                     <td className="border-t border-slate-100 px-4 py-3 align-middle">
                       <span
-                        className="block truncate text-sm text-slate-700"
+                        className="whitespace-nowrap text-sm text-slate-700"
                         title={
                           p.location_of_work ||
                           ""
