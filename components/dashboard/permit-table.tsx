@@ -395,6 +395,7 @@ export function PermitTable({
                   sortKey="serial_no"
                   sort={sort}
                   onSort={toggleSort}
+                  className="w-px px-3"
                 />
 
                 <SortableHeader
@@ -453,8 +454,11 @@ export function PermitTable({
                   >
                     {/* SERIAL */}
 
-                    <td className="border-t border-slate-100 px-4 py-3 align-middle">
-                      <span className="whitespace-nowrap text-sm text-slate-700">
+                    <td className="w-px border-t border-slate-100 px-3 py-3 align-middle">
+                      <span
+                        className="block max-w-[120px] truncate text-xs text-slate-500"
+                        title={p.serial_no}
+                      >
                         {p.serial_no}
                       </span>
                     </td>
@@ -542,6 +546,7 @@ function SortableHeader({
   sortKey,
   sort,
   onSort,
+  className = "",
 }: {
   label: string;
 
@@ -552,6 +557,8 @@ function SortableHeader({
   onSort: (
     key: SortKey,
   ) => void;
+
+  className?: string;
 }) {
   const active =
     sort?.key === sortKey;
@@ -559,12 +566,7 @@ function SortableHeader({
   return (
     <th
       scope="col"
-      className="
-        px-4
-        py-3
-        text-left
-        align-middle
-      "
+      className={`px-4 py-3 text-left align-middle ${className}`}
     >
       <button
         type="button"
