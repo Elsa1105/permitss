@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Input, Select } from "@/components/ui/input";
 import type { UserRow } from "@/lib/supabase/types";
 
@@ -34,6 +35,62 @@ export function UsersTable({
 
   const [busyId, setBusyId] = React.useState<string | null>(null);
   const [editingId, setEditingId] = React.useState<string | null>(null);
+
+  const [resetTarget, setResetTarget] = React.useState<UserRow | null>(null);
+  const [resetPassword, setResetPassword] = React.useState("");
+  const [resetConfirm, setResetConfirm] = React.useState("");
+  const [resetBusy, setResetBusy] = React.useState(false);
+
+  function openResetDialog(user: UserRow) {
+    setResetTarget(user);
+    setResetPassword("");
+    setResetConfirm("");
+  }
+
+  function closeResetDialog() {
+    setResetTarget(null);
+    setResetPassword("");
+    setResetConfirm("");
+  }
+
+  async function submitReset() {
+    if (!resetTarget) return;
+
+    if (resetPassword.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+
+    if (resetPassword !== resetConfirm) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
+    setResetBusy(true);
+
+    try {
+      const res = await fetch(
+        `/api/admin/users/${resetTarget.id}/reset-password`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: resetPassword }),
+        },
+      );
+
+      const body = await res.json();
+
+      if (!res.ok) {
+        toast.error(body.error || "Reset failed");
+        return;
+      }
+
+      toast.success(`Password updated for ${resetTarget.full_name}`);
+      closeResetDialog();
+    } finally {
+      setResetBusy(false);
+    }
+  }
 
   const [editForm, setEditForm] = React.useState<{
     full_name: string;
@@ -347,6 +404,15 @@ export function UsersTable({
                     >
                       {user.active ? "Deactivate" : "Activate"}
                     </button>
+
+                    <button
+                      type="button"
+                      className="text-sm text-blue-600 hover:underline disabled:opacity-50"
+                      disabled={busyId === user.id}
+                      onClick={() => openResetDialog(user)}
+                    >
+                      Reset Password
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -354,6 +420,48 @@ export function UsersTable({
           })}
         </tbody>
       </table>
+
+      <Dialog
+        open={!!resetTarget}
+        onClose={closeResetDialog}
+        title="Reset Password"
+        description={
+          resetTarget
+            ? `Set a new password for ${resetTarget.full_name} (${resetTarget.email}).`
+            : undefined
+        }
+        size="sm"
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={closeResetDialog}>
+              Cancel
+            </Button>
+            <Button type="button" loading={resetBusy} onClick={submitReset}>
+              Update Password
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="New Password"
+            type="password"
+            required
+            hint="Minimum 8 characters."
+            value={resetPassword}
+            onChange={(e) => setResetPassword(e.target.value)}
+            autoComplete="new-password"
+          />
+          <Input
+            label="Confirm New Password"
+            type="password"
+            required
+            value={resetConfirm}
+            onChange={(e) => setResetConfirm(e.target.value)}
+            autoComplete="new-password"
+          />
+        </div>
+      </Dialog>
     </div>
   );
 }
