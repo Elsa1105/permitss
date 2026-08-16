@@ -38,7 +38,15 @@ const NAV: NavItem[] = [
   { href: "/admin/audit",   label: "Audit Log", icon: Shield,       roles: ["admin"] },
 ];
 
-export function AppShell({ user, children }: { user: UserRow; children: React.ReactNode }) {
+export function AppShell({
+  user,
+  children,
+  formNo = "FOI-SG-057",
+}: {
+  user: UserRow;
+  children: React.ReactNode;
+  formNo?: string;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -56,13 +64,15 @@ export function AppShell({ user, children }: { user: UserRow; children: React.Re
 
   return (
     <div className="flex min-h-screen">
-      {/* Sidebar (desktop) */}
-      <aside className="hidden md:flex md:w-64 lg:w-72 flex-col bg-white border-r border-slate-200 sticky top-0 h-screen">
+      {/* Sidebar (desktop) — narrowed from w-64/w-72 so the rightmost
+          action column (e.g. Reset Password) on wide tables isn't cut off. */}
+      <aside className="hidden md:flex md:w-52 lg:w-60 flex-col bg-white border-r border-slate-200 sticky top-0 h-screen">
         <SidebarContent
           user={user}
           pathname={pathname}
           nav={visibleNav}
           onSignOut={signOut}
+          formNo={formNo}
         />
       </aside>
 
@@ -85,6 +95,7 @@ export function AppShell({ user, children }: { user: UserRow; children: React.Re
               nav={visibleNav}
               onSignOut={signOut}
               onNavigate={() => setMobileOpen(false)}
+              formNo={formNo}
             />
           </aside>
         </div>
@@ -115,12 +126,14 @@ function SidebarContent({
   nav,
   onSignOut,
   onNavigate,
+  formNo = "FOI-SG-057",
 }: {
   user: UserRow;
   pathname: string;
   nav: NavItem[];
   onSignOut: () => void;
   onNavigate?: () => void;
+  formNo?: string;
 }) {
   return (
     <>
@@ -131,7 +144,7 @@ function SidebarContent({
           </div>
           <div>
             <div className="font-semibold text-sm leading-tight">Franklin ePermit</div>
-            <div className="text-xs text-slate-500">FOI-SG-057</div>
+            <div className="text-xs text-slate-500">{formNo}</div>
           </div>
         </div>
       </div>
