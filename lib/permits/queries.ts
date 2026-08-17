@@ -23,6 +23,7 @@ const PERMIT_WITH_JOINS = `
 export async function listPermits(opts?: {
   state?: PermitRow["state"][];
   applicantId?: string;
+  companyId?: string;
   limit?: number;
 }): Promise<PermitWithJoins[]> {
   const supabase = await createServerSupabase();
@@ -38,7 +39,12 @@ export async function listPermits(opts?: {
     q = q.in("state", opts.state);
   }
 
-  if (opts?.applicantId) {
+  // companyId scopes to every permit raised for that company (e.g. all CFE
+  // permits), regardless of who the applicant was. Takes priority over
+  // applicantId, which scopes to a single user's own permits.
+  if (opts?.companyId) {
+    q = q.eq("company_id", opts.companyId);
+  } else if (opts?.applicantId) {
     q = q.eq("applicant_id", opts.applicantId);
   }
 

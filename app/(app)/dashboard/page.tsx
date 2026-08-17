@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, FilePlus } from "lucide-react";
 import { requireUser } from "@/lib/auth/session";
+import { createServerSupabase } from "@/lib/supabase/server";
 import { listPermits } from "@/lib/permits/queries";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,9 +54,39 @@ export default async function DashboardPage() {
     myQueueStates = IN_PROGRESS_STATES;
   }
 
+  // CFE users see every permit raised for CFE (not just their own). Figure
+  // out whether this user's active site access is CFE, and if so scope the
+  // queue by company instead of by applicant.
+  let cfeCompanyId: string | undefined;
+
+  if (APPLICANT_QUEUE_ROLES.has(user.role)) {
+    const supabase = await createServerSupabase();
+    const { data: siteRoles } = await supabase
+      .from("user_site_roles")
+      .select("company_id, company:company_id ( code )")
+      .eq("user_id", user.id)
+      .eq("active", true);
+
+    const cfeRole = (siteRoles ?? []).find(
+      (r) =>
+        (r as unknown as { company: { code: string } | null }).company
+          ?.code === "CFE",
+    );
+
+    if (cfeRole) {
+      cfeCompanyId = (cfeRole as unknown as { company_id: string })
+        .company_id;
+      myQueueTitle = "CFE — Drafts & in-progress permit requests";
+    }
+  }
+
   const queue = await listPermits({
     state: myQueueStates,
-    applicantId: APPLICANT_QUEUE_ROLES.has(user.role) ? user.id : undefined,
+    companyId: cfeCompanyId,
+    applicantId:
+      !cfeCompanyId && APPLICANT_QUEUE_ROLES.has(user.role)
+        ? user.id
+        : undefined,
     limit: 50,
   });
 
