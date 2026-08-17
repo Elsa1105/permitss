@@ -381,29 +381,34 @@ export function UsersTable({
                 </td>
 
                 <td className="text-right">
-                  <div className="flex justify-end gap-3">
-                    <button
-                      type="button"
-                      className="text-sm text-blue-600 hover:underline disabled:opacity-50"
-                      disabled={busyId === user.id}
-                      onClick={() => startEdit(user)}
-                    >
-                      Edit
-                    </button>
+                  {/* Stacked instead of a single wide row so this column
+                      (and "Reset Password" specifically) never gets pushed
+                      off the right edge of the page. */}
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="flex justify-end gap-3">
+                      <button
+                        type="button"
+                        className="text-sm text-blue-600 hover:underline disabled:opacity-50"
+                        disabled={busyId === user.id}
+                        onClick={() => startEdit(user)}
+                      >
+                        Edit
+                      </button>
 
-                    <button
-                      type="button"
-                      className="text-sm text-blue-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={busyId === user.id || (isSelf && user.active)}
-                      onClick={() => toggleActive(user)}
-                      title={
-                        isSelf && user.active
-                          ? "You cannot deactivate your own account"
-                          : undefined
-                      }
-                    >
-                      {user.active ? "Deactivate" : "Activate"}
-                    </button>
+                      <button
+                        type="button"
+                        className="text-sm text-blue-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={busyId === user.id || (isSelf && user.active)}
+                        onClick={() => toggleActive(user)}
+                        title={
+                          isSelf && user.active
+                            ? "You cannot deactivate your own account"
+                            : undefined
+                        }
+                      >
+                        {user.active ? "Deactivate" : "Activate"}
+                      </button>
+                    </div>
 
                     <button
                       type="button"

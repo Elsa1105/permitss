@@ -11,8 +11,9 @@ export default async function AppLayout({
 
   // Figure out which company site(s) this user has active access to, so we
   // can show the right form number (FOI-SG-057 vs CFE-SG-057) in the
-  // sidebar. Users with access to both (or admins with none) fall back to
-  // the FOI form number.
+  // sidebar. Any active CFE site access shows the CFE form number; admins
+  // (or anyone with no site access at all) fall back to the FOI form
+  // number.
   const supabase = await createServerSupabase();
   const { data: siteRoles } = await supabase
     .from("user_site_roles")
@@ -28,10 +29,7 @@ export default async function AppLayout({
     ),
   );
 
-  const formNo =
-    companyCodes.length === 1 && companyCodes[0] === "CFE"
-      ? "CFE-SG-057"
-      : "FOI-SG-057";
+  const formNo = companyCodes.includes("CFE") ? "CFE-SG-057" : "FOI-SG-057";
 
   return (
     <AppShell user={user} formNo={formNo}>
