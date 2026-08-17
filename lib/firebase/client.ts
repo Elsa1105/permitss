@@ -7,14 +7,16 @@
 import { initializeApp, getApps, getApp, type FirebaseOptions } from "firebase/app";
 import { getMessaging, isSupported, type Messaging } from "firebase/messaging";
 
+// Nilai-nilai ini diambil dari environment variables (.env.local)
+// supaya file ini aman di-commit ke git dan gampang beda-beda per environment.
 const firebaseConfig: FirebaseOptions = {
-  apiKey: "AIzaSyD1k0SnQJDazL2kt6d8AbvKJp-tO_LeziA",
-  authDomain: "epermits-6f549.firebaseapp.com",
-  projectId: "epermits-6f549",
-  storageBucket: "epermits-6f549.firebasestorage.app",
-  messagingSenderId: "729203405440",
-  appId: "1:729203405440:web:0a5cb3ebbd7e66b7e66c65",
-  measurementId: "G-1TJM0YC8NG",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
 // Avoid re-initializing on hot reload / multiple imports
