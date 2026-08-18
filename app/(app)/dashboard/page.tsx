@@ -8,6 +8,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty";
 import { PermitTable } from "@/components/dashboard/permit-table";
 import type { PermitState } from "@/lib/supabase/types";
+import FirebaseDebug from "@/components/FirebaseDebug";
 
 export const dynamic = "force-dynamic";
 
@@ -158,6 +159,8 @@ export default async function DashboardPage() {
           </CardBody>
         </Card>
       ) : null}
+
+      <FirebaseDebug />
     </div>
   );
 }
