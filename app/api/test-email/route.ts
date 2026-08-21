@@ -1,9 +1,9 @@
 // app/api/test-email/route.ts
 //
-// Endpoint SEMENTARA buat ngetes apakah SMTP email kamu jalan.
-// Cara pakai: buka di browser https://permitss.vercel.app/api/test-email?to=emailkamu@gmail.com
-// HAPUS route ini setelah selesai testing — jangan biarkan endpoint test
-// terbuka di production tanpa proteksi, karena siapa saja bisa memicu kirim email.
+// TEMPORARY endpoint to test whether your SMTP email is working.
+// Usage: open in browser https://permitss.vercel.app/api/test-email?to=youremail@gmail.com
+// DELETE this route once you're done testing — don't leave a test endpoint
+// open in production without protection, since anyone could trigger an email send.
 
 import { NextRequest, NextResponse } from "next/server";
 import { sendEmailNotification } from "@/lib/notifications/email";
@@ -13,23 +13,23 @@ export async function GET(req: NextRequest) {
 
   if (!to) {
     return NextResponse.json(
-      { error: "Tambahkan ?to=emailkamu@gmail.com di URL" },
+      { error: "Add ?to=youremail@gmail.com to the URL" },
       { status: 400 },
     );
   }
 
   const result = await sendEmailNotification({
     to,
-    subject: "Test email dari Franklin ePermit",
-    html: "<p>Ini email test. Kalau kamu terima ini, SMTP kamu jalan dengan benar ✅</p>",
-    text: "Ini email test. Kalau kamu terima ini, SMTP kamu jalan dengan benar.",
+    subject: "Test email from Franklin ePermit",
+    html: "<p>This is a test email. If you received this, your SMTP is working correctly ✅</p>",
+    text: "This is a test email. If you received this, your SMTP is working correctly.",
   });
 
   if ("error" in result && result.error) {
     return NextResponse.json(
       {
         success: false,
-        message: "Gagal kirim email",
+        message: "Failed to send email",
         error: String(result.error),
       },
       { status: 500 },
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        message: "Email di-skip, bukan error tapi nggak terkirim",
+        message: "Email was skipped, not an error but it wasn't sent",
         reason: result.reason,
       },
       { status: 200 },
@@ -49,6 +49,6 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     success: true,
-    message: `Email berhasil dikirim ke ${to}`,
+    message: `Email successfully sent to ${to}`,
   });
 }
