@@ -219,6 +219,17 @@ function eventLabel(e: PermitEmailEvent) {
 function buildSubject(p: PermitRow, e: PermitEmailEvent) {
   return `[ePermit] ${p.serial_no} - ${eventLabel(e)}`;
 }
+function appUrl() {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    "http://localhost:3000"
+  );
+}
+
+function permitUrl(id: string) {
+  return `${appUrl()}/permits/${id}`;
+}
 
 /* ================= MAIN ================= */
 
