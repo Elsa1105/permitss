@@ -330,5 +330,6 @@ Description: ${permit.description}
 
 Open:
 ${permitUrl(permit.id)}
-`,
-});
+  `,
+  });
+}
