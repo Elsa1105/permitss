@@ -321,15 +321,14 @@ export async function notifyPermitEvent(input: NotifyPermitInput) {
     <p>${permitUrl(permit.id)}</p>
   `,
   text: `
-  ${eventLabel(input.event)}
-  
-  Permit: ${permit.serial_no}
-  Status: ${permit.state}
-  Location: ${permit.location_of_work}
-  Description: ${permit.description}
-  
-  Open:
-  ${permitUrl(permit.id)}
-  `,
-  });
-}
+${eventLabel(input.event)}
+
+Permit: ${permit.serial_no}
+Status: ${permit.state}
+Location: ${permit.location_of_work}
+Description: ${permit.description}
+
+Open:
+${permitUrl(permit.id)}
+`,
+});
