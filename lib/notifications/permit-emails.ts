@@ -300,25 +300,36 @@ export async function notifyPermitEvent(input: NotifyPermitInput) {
   }
 
   return sendEmailNotification({
-    to: emails,
+  to: emails,
+  subject: buildSubject(permit, input.event),
+  html: `
+    <h2>${eventLabel(input.event)}</h2>
+    <p><b>Permit:</b> ${permit.serial_no}</p>
+    <p><b>Status:</b> ${permit.state}</p>
+    <p><b>Location:</b> ${permit.location_of_work}</p>
+    <p><b>Description:</b> ${permit.description}</p>
 
-    subject: buildSubject(permit, input.event),
+    <br/>
 
-    // ✅ LEBIH JELAS
-    html: `
-      <h2>${eventLabel(input.event)}</h2>
-      <p><b>Permit:</b> ${permit.serial_no}</p>
-      <p><b>Status:</b> ${permit.state}</p>
-      <p><b>Location:</b> ${permit.location_of_work}</p>
-      <p><b>Description:</b> ${permit.description}</p>
-    `,
+    <a href="${permitUrl(permit.id)}" 
+       style="display:inline-block;padding:10px 16px;background:#2563eb;color:white;text-decoration:none;border-radius:6px;">
+       🔗 Open Permit
+    </a>
 
-    text: `
-${eventLabel(input.event)}
-Permit: ${permit.serial_no}
-Status: ${permit.state}
-Location: ${permit.location_of_work}
-Description: ${permit.description}
-    `,
+    <br/><br/>
+    <p>Or open manually:</p>
+    <p>${permitUrl(permit.id)}</p>
+  `,
+  text: `
+  ${eventLabel(input.event)}
+  
+  Permit: ${permit.serial_no}
+  Status: ${permit.state}
+  Location: ${permit.location_of_work}
+  Description: ${permit.description}
+  
+  Open:
+  ${permitUrl(permit.id)}
+  `,
   });
 }
