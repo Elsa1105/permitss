@@ -116,7 +116,9 @@ function uniqueEmails(users: UserRow[], extra: string[] = []) {
   return Array.from(
     new Set(
       [
-        ...users.map((u) => u.email).filter(Boolean),
+        ...users
+        .map((u) => u.email)
+        .filter((e): e is string => !!e),
         ...extra,
       ].map((e) => e!.toLowerCase().trim())
     )
@@ -270,7 +272,12 @@ export async function notifyPermitEvent(input: NotifyPermitInput) {
 
   /* ===== STATIC EMAIL ===== */
 
-  const staticGroup = STATIC_EMAILS[companyCode];
+  const staticGroup = STATIC_EMAILS[companyCode] || {
+    applicant: [],
+    assessor: [],
+    srm: [],
+    admin: [],
+  };
 
   const staticEmails =
     companyCode === "CFE"
