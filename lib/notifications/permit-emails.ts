@@ -148,20 +148,21 @@ const rows = data ?? [];
     srm: [], 
   }; 
  
-  for (const row of rows) { 
-  const role = normalizeRole(row.role); 
- 
+  for (const row of rows) {
+  const role = normalizeRole(row.role);
+  if (!role) continue;
+
   const rawUser = (row as any).user;
 
   const user: UserRow | null =
-  Array.isArray(rawUser)
-    ? rawUser[0] ?? null
-    : rawUser ?? null; 
- 
-  if (map[role] && user && user.email) { 
-    map[role].push(user); 
-  } 
-} 
+    Array.isArray(rawUser)
+      ? rawUser[0] ?? null
+      : rawUser ?? null;
+
+  if (map[role] && user && user.email) {
+    map[role].push(user);
+  }
+}
  
   return map; 
 } 
