@@ -11,7 +11,7 @@ export async function getCurrentUser(): Promise<UserRow | null> {
   const { data: row, error } = await supabase
     .from("users")
     .select("*")
-    .eq("id", auth.user.id)
+    .eq("auth_user_id", auth.user.id) // ✅ FIX DI SINI
     .single();
 
   if (error || !row) return null;

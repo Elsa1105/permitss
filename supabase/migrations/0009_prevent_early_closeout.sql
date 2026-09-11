@@ -1,10 +1,6 @@
--- Migration 0009: Prevent early close-out and fix Stage IV column names
--- REPLACE your current 0009_prevent_early_closeout.sql with this file.
--- Fix included:
--- - Uses permit_stages.user_id, not submitted_by.
--- - Prevents early close-out for multi-day permits.
--- - Requires Day 2-14 endorsements before close-out.
--- - Allows applicant, Admin, or site-scoped SRM to close out.
+-- =========================================================
+-- 0009 FINAL — SAFE CLOSE OUT
+-- =========================================================
 
 drop function if exists public.permit_submit_stage4(uuid);
 
@@ -35,19 +31,27 @@ declare
   v_stage_data jsonb;
   v_acting_as text;
 begin
-  select * into v_user from public.users where id = auth.uid();
+  -- =========================
+  -- USER CHECK
+  -- =========================
+  select * into v_user
+  from public.users
+  where id = auth.uid();
 
   if v_user is null or v_user.active is not true then
     raise exception 'Unauthorized';
   end if;
 
+  -- =========================
+  -- LOAD PERMIT
+  -- =========================
   select
     p.state,
     p.applicant_id,
     p.company_id,
     p.site_id,
-    p.date_commencement::date,
-    p.date_completion::date
+    p.date_commencement,
+    p.date_completion
   into
     v_from_state,
     v_applicant_id,
@@ -63,12 +67,24 @@ begin
     raise exception 'Permit not found';
   end if;
 
+  -- ❌ prevent invalid states
+  if v_from_state in ('rejected','revoked','expired') then
+    raise exception 'Permit cannot be closed from state: %', v_from_state;
+  end if;
+
+  -- =========================
+  -- AUTHORIZATION
+  -- =========================
   if not (
     public.is_admin()
     or v_applicant_id = v_user.id
-    or public.has_site_role(v_company_id, v_site_id, 'srm')
+    or (
+      v_company_id is not null
+      and v_site_id is not null
+      and public.has_site_role(v_company_id, v_site_id, 'srm')
+    )
   ) then
-    raise exception 'Only the applicant, Admin, or site-scoped SRM can submit Stage IV close-out';
+    raise exception 'Not allowed to close permit';
   end if;
 
   if v_from_state not in (
@@ -76,101 +92,94 @@ begin
     'pending_daily_endorsement',
     'pending_closure'
   ) then
-    raise exception 'Permit is not ready for close-out. Current state: %', v_from_state;
+    raise exception 'Permit not ready for close-out. Current: %', v_from_state;
   end if;
 
+  -- =========================
+  -- DATE VALIDATION
+  -- =========================
   if v_commencement is null or v_completion is null then
-    raise exception 'Permit commencement and completion dates are required before close-out';
+    raise exception 'Dates required before close-out';
   end if;
 
   if v_completion < v_commencement then
-    raise exception 'Permit completion date cannot be earlier than commencement date';
+    raise exception 'Invalid completion date';
   end if;
 
   v_total_days := (v_completion - v_commencement) + 1;
 
-  -- Multi-day permit cannot be closed before planned completion date.
   if v_total_days > 1 and current_date < v_completion then
-    raise exception
-      'Multi-day permit cannot be closed before the planned completion date. Completion date: %',
-      v_completion;
+    raise exception 'Cannot close before completion date (%).', v_completion;
   end if;
 
-  -- Day 2-14 endorsement is required for multi-day permits.
-  -- 1 day  = 0 endorsement required
-  -- 2 days = Day 2 required
-  -- 3 days = Day 2 and Day 3 required
-  -- 14+ days = Day 2 through Day 14 required
+  -- =========================
+  -- ENDORSEMENT CHECK
+  -- =========================
   v_required_endorsement_days := greatest(least(v_total_days, 14) - 1, 0);
 
   if v_required_endorsement_days > 0 then
+
     select count(*)
     into v_completed_endorsements
-    from public.permit_endorsements pe
-    where pe.permit_id = p_permit_id
-      and pe.day_number between 2 and least(v_total_days, 14)
-      and pe.action = 'continue';
+    from public.permit_endorsements
+    where permit_id = p_permit_id
+      and day_number between 2 and least(v_total_days,14)
+      and action = 'continue';
 
     select count(*)
     into v_bad_endorsements
-    from public.permit_endorsements pe
-    where pe.permit_id = p_permit_id
-      and pe.day_number between 2 and least(v_total_days, 14)
-      and pe.action in ('reject', 'revoke');
+    from public.permit_endorsements
+    where permit_id = p_permit_id
+      and action in ('reject','revoke');
 
     if v_bad_endorsements > 0 then
-      raise exception
-        'Permit cannot be closed because one or more daily endorsements were rejected or revoked';
+      raise exception 'Rejected/revoked endorsement exists';
     end if;
 
     if v_completed_endorsements < v_required_endorsement_days then
-      raise exception
-        'Multi-day permit cannot be closed. Required Day 2-14 endorsements: %, completed: %',
-        v_required_endorsement_days,
-        v_completed_endorsements;
+      raise exception 'Missing endorsements (%/%)',
+        v_completed_endorsements,
+        v_required_endorsement_days;
     end if;
-  else
-    v_completed_endorsements := 0;
   end if;
 
+  -- =========================
+  -- ACTING AS
+  -- =========================
   v_acting_as := case
     when v_applicant_id = v_user.id then 'self'
     when public.is_admin() then 'admin_override'
     else 'srm_override'
   end;
 
+  -- =========================
+  -- STAGE SAVE
+  -- =========================
   v_stage_data := jsonb_build_object(
     'closed_out', true,
-    'name', v_user.full_name,
-    'department', v_user.department,
     'closed_by', v_user.id,
     'closed_at', now(),
     'acting_as', v_acting_as,
     'total_days', v_total_days,
-    'required_endorsement_days', v_required_endorsement_days,
-    'completed_endorsements', v_completed_endorsements
+    'required_endorsements', v_required_endorsement_days,
+    'completed_endorsements', coalesce(v_completed_endorsements,0)
   );
 
   insert into public.permit_stages (
-    permit_id,
-    stage,
-    user_id,
-    data,
-    submitted_at
+    permit_id, stage, user_id, data
   )
   values (
-    p_permit_id,
-    'IV',
-    v_user.id,
-    v_stage_data,
-    now()
+    p_permit_id, 'IV', v_user.id, v_stage_data
   )
   on conflict (permit_id, stage)
   do update set
     user_id = excluded.user_id,
     data = excluded.data,
-    submitted_at = excluded.submitted_at;
+    submitted_at = now();
 
+  -- =========================
+  -- UPDATE PERMIT
+  -- =========================
   update public.permits
   set
     state = v_to_state,
@@ -178,22 +187,24 @@ begin
     updated_at = now()
   where id = p_permit_id;
 
+  -- =========================
+  -- AUDIT (FIXED)
+  -- =========================
   perform public.write_audit(
     p_permit_id,
     'closed',
-    v_from_state,
-    v_to_state,
-    case when v_acting_as <> 'self' then v_acting_as end,
+    auth.uid(),
     v_stage_data
   );
 
+  -- =========================
+  -- EMAIL (🔥 IMPORTANT)
+  -- =========================
+  perform public.send_email_event('closed', p_permit_id);
+
   return jsonb_build_object(
     'permit_id', p_permit_id,
-    'from_state', v_from_state,
-    'to_state', v_to_state,
-    'total_days', v_total_days,
-    'required_endorsement_days', v_required_endorsement_days,
-    'completed_endorsements', v_completed_endorsements,
+    'status', 'closed',
     'acting_as', v_acting_as
   );
 end;

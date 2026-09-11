@@ -14,9 +14,6 @@
 alter table public.permits
 add column if not exists job_type text;
 
--- Existing MVP records are all Hot Work permits. Backfill them so the new
--- dashboard column is useful immediately, while new permits capture a more
--- specific applicant-entered Job Type.
 update public.permits
 set job_type = 'Hot Work'
 where job_type is null or trim(job_type) = '';
@@ -49,8 +46,6 @@ as $$
       and (
         u.role = 'admin'
 
-        -- Preferred rule: any active SRM assigned to the same company/site
-        -- may cover the daily endorsement, regardless of who approved Stage III.
         or (
           p.company_id is not null
           and p.site_id is not null
@@ -65,9 +60,6 @@ as $$
           )
         )
 
-        -- Backward-compatible UAT fallback: when a site has not yet been given
-        -- any SRM site-role assignments, active global/qualified SRMs may cover
-        -- the endorsement. Once site assignments exist, site scope is enforced.
         or (
           (
             u.role = 'srm'
@@ -90,9 +82,10 @@ as $$
   );
 $$;
 
--- Ensure replacement SRMs can see the permit on their dashboard before they
--- attempt the Day 2-14 endorsement. Existing applicant/assessor/involved-user
--- and site-role visibility remains unchanged.
+-- =====================================================
+-- 2b. Visibility helper (IMPORTANT for dashboard)
+-- =====================================================
+
 create or replace function public.can_view_permit_site(
   p_permit_id uuid
 )
@@ -113,6 +106,7 @@ as $$
         or p.srm_id = auth.uid()
         or p.closer_id = auth.uid()
         or public.can_act_as_srm_for_permit(p.id)
+
         or (
           p.company_id is not null
           and p.site_id is not null
@@ -130,8 +124,15 @@ as $$
 $$;
 
 -- =====================================================
--- 3. Recreate daily endorsement RPC using shared SRM coverage rule
+-- 3. Recreate daily endorsement with SRM coverage
 -- =====================================================
+
+drop function if exists public.permit_endorse_day(
+  uuid,
+  integer,
+  public.endorsement_action,
+  text
+);
 
 create or replace function public.permit_endorse_day(
   p_permit_id uuid,
@@ -227,7 +228,7 @@ begin
   end if;
 
   if not public.can_act_as_srm_for_permit(p_permit_id) then
-    raise exception 'Only an authorised SRM / Project Manager for this permit site can submit daily endorsements';
+    raise exception 'Only authorised SRM for this site can endorse';
   end if;
 
   if v_from_state not in ('approved_active', 'pending_daily_endorsement') then
@@ -235,78 +236,40 @@ begin
   end if;
 
   if v_commencement is null or v_completion is null then
-    raise exception 'Permit commencement and completion dates are required';
+    raise exception 'Permit dates are required';
   end if;
 
   if v_completion < v_commencement then
-    raise exception 'Permit completion date cannot be earlier than commencement date';
+    raise exception 'Invalid permit date range';
   end if;
 
   v_total_days := (v_completion - v_commencement) + 1;
 
   if v_total_days <= 1 then
-    raise exception 'Single-day permits do not require Day 2-14 endorsement';
+    raise exception 'Single-day permits do not require endorsement';
   end if;
 
   v_max_endorsement_day := least(v_total_days, 14);
 
   if p_day > v_max_endorsement_day then
-    raise exception
-      'Invalid endorsement day. Permit only requires Day 2 to Day % endorsements',
-      v_max_endorsement_day;
+    raise exception 'Invalid endorsement day';
   end if;
 
   v_target_date := v_commencement + (p_day - 1);
   v_current_day := (v_today - v_commencement) + 1;
 
-  if v_today < v_target_date then
-    raise exception
-      'Future endorsement is not allowed. Day % can only be endorsed on %',
-      p_day,
-      v_target_date;
-  end if;
-
-  if v_today > v_target_date then
-    raise exception
-      'Backdated endorsement is not allowed. Day % endorsement date was %',
-      p_day,
-      v_target_date;
-  end if;
-
-  if p_day <> v_current_day then
-    raise exception
-      'Invalid endorsement day. Today is Day %, but submitted Day %',
-      v_current_day,
-      p_day;
+  if v_today <> v_target_date then
+    raise exception 'Endorsement must be done on the correct day';
   end if;
 
   select count(*)
   into v_existing_count
-  from public.permit_endorsements pe
-  where pe.permit_id = p_permit_id
-    and pe.day_number = p_day;
+  from public.permit_endorsements
+  where permit_id = p_permit_id
+    and day_number = p_day;
 
   if v_existing_count > 0 then
-    raise exception 'Day % has already been endorsed', p_day;
-  end if;
-
-  if p_day > 2 then
-    select count(*)
-    into v_missing_previous_days
-    from generate_series(2, p_day - 1) as d(day_number)
-    where not exists (
-      select 1
-      from public.permit_endorsements pe
-      where pe.permit_id = p_permit_id
-        and pe.day_number = d.day_number
-        and pe.action = 'continue'
-    );
-
-    if v_missing_previous_days > 0 then
-      raise exception
-        'Previous daily endorsements must be completed before Day %',
-        p_day;
-    end if;
+    raise exception 'Already endorsed';
   end if;
 
   insert into public.permit_endorsements (
@@ -328,63 +291,51 @@ begin
 
   if p_action = 'continue' then
     if p_day >= v_max_endorsement_day then
-      v_to_state := 'pending_closure'::public.permit_state;
+      v_to_state := 'pending_closure';
     else
-      v_to_state := 'pending_daily_endorsement'::public.permit_state;
+      v_to_state := 'pending_daily_endorsement';
     end if;
 
-    v_audit_action := 'endorsed_continue'::public.audit_action;
+    v_audit_action := 'endorsed_continue';
 
   elsif p_action = 'reject' then
-    v_to_state := 'revoked'::public.permit_state;
-    v_audit_action := 'endorsed_reject'::public.audit_action;
+    v_to_state := 'revoked';
+    v_audit_action := 'endorsed_reject';
 
   else
-    v_to_state := 'revoked'::public.permit_state;
-    v_audit_action := 'endorsed_revoke'::public.audit_action;
+    v_to_state := 'revoked';
+    v_audit_action := 'endorsed_revoke';
   end if;
 
   update public.permits
-  set
-    state = v_to_state,
-    updated_at = now()
+  set state = v_to_state,
+      updated_at = now()
   where id = p_permit_id;
 
   perform public.write_audit(
-    p_permit_id,
-    v_audit_action,
-    v_from_state,
-    v_to_state,
-    v_clean_remarks,
-    jsonb_build_object(
-      'day_number', p_day,
-      'action', p_action::text,
-      'remarks', v_clean_remarks,
-      'target_date', v_target_date,
-      'today_singapore', v_today,
-      'current_day', v_current_day,
-      'total_days', v_total_days,
-      'max_endorsement_day', v_max_endorsement_day,
-      'leave_coverage_enabled', true,
-      'endorser_id', v_user_id,
-      'permit_stage3_srm_id', (
-        select p.srm_id from public.permits p where p.id = p_permit_id
-      )
-    )
-  );
+  p_permit_id,
+  v_audit_action,
+  v_from_state,
+  v_to_state,
+  v_clean_remarks,
+  jsonb_build_object(
+    'day_number', p_day,
+    'action', p_action::text,
+    'remarks', v_clean_remarks,
+    'target_date', v_target_date,
+    'today_singapore', v_today,
+    'current_day', v_current_day,
+    'total_days', v_total_days,
+    'max_endorsement_day', v_max_endorsement_day
+  )
+);
 
   return jsonb_build_object(
     'permit_id', p_permit_id,
     'day_number', p_day,
     'action', p_action::text,
     'from_state', v_from_state::text,
-    'to_state', v_to_state::text,
-    'target_date', v_target_date,
-    'today_singapore', v_today,
-    'current_day', v_current_day,
-    'total_days', v_total_days,
-    'max_endorsement_day', v_max_endorsement_day,
-    'endorser_id', v_user_id
+    'to_state', v_to_state::text
   );
 end;
 $$;

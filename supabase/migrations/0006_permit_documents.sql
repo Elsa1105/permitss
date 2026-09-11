@@ -1,21 +1,26 @@
--- Migration 0006: Permit supporting documents / RA upload
-
 -- =====================================================
--- 1. Storage bucket for supporting documents
+-- 0006 PERMIT DOCUMENTS (RA / JSA / ETC)
 -- =====================================================
 
+-- =====================================================
+-- 1. STORAGE BUCKET
+-- =====================================================
 insert into storage.buckets (id, name, public)
 values ('permit-documents', 'permit-documents', false)
 on conflict (id) do nothing;
 
 -- =====================================================
--- 2. Permit documents table
+-- 2. TABLE
 -- =====================================================
-
 create table if not exists public.permit_documents (
   id uuid primary key default gen_random_uuid(),
-  permit_id uuid not null references public.permits(id) on delete cascade,
-  uploaded_by uuid not null references public.users(id),
+
+  permit_id uuid not null
+    references public.permits(id) on delete cascade,
+
+  uploaded_by uuid not null
+    references public.users(id),
+
   document_type text not null check (
     document_type in (
       'risk_assessment',
@@ -25,10 +30,13 @@ create table if not exists public.permit_documents (
       'other'
     )
   ),
+
   file_name text not null,
   storage_path text not null,
+
   mime_type text,
   file_size bigint,
+
   created_at timestamptz not null default now()
 );
 
@@ -41,7 +49,7 @@ on public.permit_documents (uploaded_by);
 alter table public.permit_documents enable row level security;
 
 -- =====================================================
--- 3. Permit documents table policies
+-- 3. TABLE POLICIES (🔥 FIXED WITH COMPANY SEGREGATION)
 -- =====================================================
 
 drop policy if exists "permit-documents read" on public.permit_documents;
@@ -55,18 +63,18 @@ using (
     select 1
     from public.permits p
     where p.id = permit_documents.permit_id
+      and p.company_id = public.get_user_company() -- 🔥 FIX
       and (
         public.is_admin()
         or p.applicant_id = auth.uid()
         or p.assessor_id = auth.uid()
         or p.srm_id = auth.uid()
         or p.closer_id = auth.uid()
-        or public.has_role('assessor')
-        or public.has_role('srm')
       )
   )
 );
 
+-- INSERT
 drop policy if exists "permit-documents insert" on public.permit_documents;
 
 create policy "permit-documents insert"
@@ -79,15 +87,20 @@ with check (
     select 1
     from public.permits p
     where p.id = permit_documents.permit_id
+      and p.company_id = public.get_user_company() -- 🔥 FIX
       and (
         public.is_admin()
-        or p.applicant_id = auth.uid()
-        or public.has_role('assessor')
-        or public.has_role('srm')
+        or (
+          p.applicant_id = auth.uid()
+          and p.state in ('draft','pending_safety_assessment')
+        )
+        or p.assessor_id = auth.uid()
+        or p.srm_id = auth.uid()
       )
   )
 );
 
+-- DELETE
 drop policy if exists "permit-documents delete" on public.permit_documents;
 
 create policy "permit-documents delete"
@@ -95,15 +108,25 @@ on public.permit_documents
 for delete
 to authenticated
 using (
-  uploaded_by = auth.uid()
-  or public.is_admin()
+  (
+    uploaded_by = auth.uid()
+    or public.is_admin()
+  )
+  and exists (
+    select 1
+    from public.permits p
+    where p.id = permit_documents.permit_id
+      and p.company_id = public.get_user_company() -- 🔥 FIX
+      and p.state = 'draft'
+  )
 );
 
 -- =====================================================
--- 4. Storage object policies for permit-documents
--- Path convention:
--- permit-documents/{permit_id}/{document_id}.{ext}
+-- 4. STORAGE POLICIES (🔥 CONSISTENT WITH PHOTOS)
 -- =====================================================
+
+-- PATH:
+-- permit-documents/{permit_id}/{document_id}.{ext}
 
 drop policy if exists "permit-documents storage read" on storage.objects;
 
@@ -117,14 +140,13 @@ using (
     select 1
     from public.permits p
     where p.id = (split_part(name, '/', 1))::uuid
+      and p.company_id = public.get_user_company() -- 🔥 FIX
       and (
         public.is_admin()
         or p.applicant_id = auth.uid()
         or p.assessor_id = auth.uid()
         or p.srm_id = auth.uid()
         or p.closer_id = auth.uid()
-        or public.has_role('assessor')
-        or public.has_role('srm')
       )
   )
 );
@@ -141,11 +163,15 @@ with check (
     select 1
     from public.permits p
     where p.id = (split_part(name, '/', 1))::uuid
+      and p.company_id = public.get_user_company() -- 🔥 FIX
       and (
         public.is_admin()
-        or p.applicant_id = auth.uid()
-        or public.has_role('assessor')
-        or public.has_role('srm')
+        or (
+          p.applicant_id = auth.uid()
+          and p.state in ('draft','pending_safety_assessment')
+        )
+        or p.assessor_id = auth.uid()
+        or p.srm_id = auth.uid()
       )
   )
 );
@@ -161,5 +187,12 @@ using (
   and (
     owner = auth.uid()
     or public.is_admin()
+  )
+  and exists (
+    select 1
+    from public.permits p
+    where p.id = (split_part(name, '/', 1))::uuid
+      and p.company_id = public.get_user_company() -- 🔥 FIX
+      and p.state = 'draft'
   )
 );

@@ -1,11 +1,6 @@
--- Migration 0013: Phase 2 Foundation
--- ADD this file after 0012.
--- Covers Phase 2 database foundation:
--- 1) Future permit types.
--- 2) Email/notification configuration.
--- 3) Public TV / active permit display.
--- 4) HR/user sync fields.
--- 5) Retention policy foundation.
+-- =====================================================
+-- Migration 0013: Phase 2 Foundation (FIXED FULL VERSION)
+-- =====================================================
 
 -- =====================================================
 -- 1. Permit type registry for Phase 2 expansion
@@ -147,20 +142,17 @@ on public.notification_queue(permit_id);
 drop trigger if exists notification_groups_set_updated on public.notification_groups;
 create trigger notification_groups_set_updated
 before update on public.notification_groups
-for each row
-execute function public.tg_set_updated_at();
+for each row execute function public.tg_set_updated_at();
 
 drop trigger if exists notification_recipients_set_updated on public.notification_recipients;
 create trigger notification_recipients_set_updated
 before update on public.notification_recipients
-for each row
-execute function public.tg_set_updated_at();
+for each row execute function public.tg_set_updated_at();
 
 drop trigger if exists notification_rules_set_updated on public.notification_rules;
 create trigger notification_rules_set_updated
 before update on public.notification_rules
-for each row
-execute function public.tg_set_updated_at();
+for each row execute function public.tg_set_updated_at();
 
 alter table public.notification_groups enable row level security;
 alter table public.notification_recipients enable row level security;
@@ -170,46 +162,55 @@ alter table public.notification_queue enable row level security;
 drop policy if exists "notification_groups admin all" on public.notification_groups;
 create policy "notification_groups admin all"
 on public.notification_groups
-for all
-to authenticated
+for all to authenticated
 using (public.is_admin())
 with check (public.is_admin());
 
 drop policy if exists "notification_recipients admin all" on public.notification_recipients;
 create policy "notification_recipients admin all"
 on public.notification_recipients
-for all
-to authenticated
+for all to authenticated
 using (public.is_admin())
 with check (public.is_admin());
 
 drop policy if exists "notification_rules admin all" on public.notification_rules;
 create policy "notification_rules admin all"
 on public.notification_rules
-for all
-to authenticated
+for all to authenticated
 using (public.is_admin())
 with check (public.is_admin());
 
 drop policy if exists "notification_queue admin all" on public.notification_queue;
 create policy "notification_queue admin all"
 on public.notification_queue
-for all
-to authenticated
+for all to authenticated
 using (public.is_admin())
 with check (public.is_admin());
 
--- Seed default group placeholders.
-insert into public.notification_groups (company_id, site_id, code, name, description)
-select c.id, s.id, 'EPERMIT_DEFAULT', c.code || ' ePermit Default Notification Group', 'Default Phase 2 notification group for ePermit events.'
-from public.companies c
-join public.sites s on s.company_id = c.id and s.code = 'MAIN'
-where c.code in ('FOI', 'CFE')
-on conflict (company_id, site_id, code)
-do update set
-  name = excluded.name,
-  description = excluded.description,
-  active = true;
+-- =====================================================
+-- 🔥 FIX PENTING: sites mungkin belum ada → SAFE GUARD
+-- =====================================================
+
+do $$
+begin
+  if exists (select 1 from information_schema.tables where table_name = 'sites') then
+
+    insert into public.notification_groups (company_id, site_id, code, name, description)
+    select c.id, s.id,
+           'EPERMIT_DEFAULT',
+           c.code || ' ePermit Default Notification Group',
+           'Default Phase 2 notification group for ePermit events.'
+    from public.companies c
+    join public.sites s on s.company_id = c.id and s.code = 'MAIN'
+    where c.code in ('FOI', 'CFE')
+    on conflict (company_id, site_id, code)
+    do update set
+      name = excluded.name,
+      description = excluded.description,
+      active = true;
+
+  end if;
+end $$;
 
 -- =====================================================
 -- 3. Public TV / active permit display foundation
@@ -234,18 +235,23 @@ create table if not exists public.display_screens (
 drop trigger if exists display_screens_set_updated on public.display_screens;
 create trigger display_screens_set_updated
 before update on public.display_screens
-for each row
-execute function public.tg_set_updated_at();
+for each row execute function public.tg_set_updated_at();
 
 alter table public.display_screens enable row level security;
 
 drop policy if exists "display_screens admin all" on public.display_screens;
 create policy "display_screens admin all"
 on public.display_screens
-for all
-to authenticated
+for all to authenticated
 using (public.is_admin())
 with check (public.is_admin());
+
+-- =====================================================
+-- 🔥 FIX: column public_view_enabled mungkin belum ada
+-- =====================================================
+
+alter table public.permits
+add column if not exists public_view_enabled boolean default true;
 
 create or replace function public.get_active_permits_for_display(
   p_public_token uuid
@@ -267,40 +273,23 @@ begin
   where public_token = p_public_token
     and active = true;
 
-  if v_company_id is null or v_site_id is null then
+  if v_company_id is null then
     return '[]'::jsonb;
   end if;
 
-  select coalesce(
-    jsonb_agg(
-      jsonb_build_object(
-        'serial_no', p.serial_no,
-        'permit_type', p.permit_type,
-        'state', p.state,
-        'vessel_project', p.vessel_project,
-        'location_of_work', p.location_of_work,
-        'date_commencement', p.date_commencement,
-        'date_completion', p.date_completion,
-        'description', p.description,
-        'hazard_types', p.hazard_types,
-        'updated_at', p.updated_at
-      )
-      order by p.date_completion asc, p.serial_no asc
-    ),
-    '[]'::jsonb
-  )
+  select coalesce(jsonb_agg(to_jsonb(p)), '[]'::jsonb)
   into v_result
   from public.permits p
   where p.company_id = v_company_id
-    and p.site_id = v_site_id
-    and p.state in ('approved_active', 'pending_daily_endorsement', 'pending_closure')
-    and p.public_view_enabled = true;
+    and p.state in ('approved_active','pending_daily_endorsement','pending_closure')
+    and coalesce(p.public_view_enabled, true) = true;
 
   return v_result;
 end;
 $$;
 
-grant execute on function public.get_active_permits_for_display(uuid) to anon, authenticated;
+grant execute on function public.get_active_permits_for_display(uuid)
+to anon, authenticated;
 
 -- =====================================================
 -- 4. HR / user sync foundation
@@ -341,25 +330,42 @@ create table if not exists public.retention_policies (
 drop trigger if exists retention_policies_set_updated on public.retention_policies;
 create trigger retention_policies_set_updated
 before update on public.retention_policies
-for each row
-execute function public.tg_set_updated_at();
+for each row execute function public.tg_set_updated_at();
 
 alter table public.retention_policies enable row level security;
 
 drop policy if exists "retention_policies admin all" on public.retention_policies;
 create policy "retention_policies admin all"
 on public.retention_policies
-for all
-to authenticated
+for all to authenticated
 using (public.is_admin())
 with check (public.is_admin());
 
-insert into public.retention_policies (permit_type, company_id, site_id, retain_indefinitely, active)
-select 'hot_work_onshore', c.id, s.id, true, true
-from public.companies c
-join public.sites s on s.company_id = c.id and s.code = 'MAIN'
-where c.code in ('FOI', 'CFE')
-on conflict (permit_type, company_id, site_id)
-do update set
-  retain_indefinitely = true,
-  active = true;
+-- SAFE insert (avoid crash if sites not exist)
+do $$
+begin
+  if exists (select 1 from information_schema.tables where table_name = 'sites') then
+
+    insert into public.retention_policies (
+      permit_type,
+      company_id,
+      site_id,
+      retain_indefinitely,
+      active
+    )
+    select
+      'hot_work_onshore',
+      c.id,
+      s.id,
+      true,
+      true
+    from public.companies c
+    join public.sites s on s.company_id = c.id and s.code = 'MAIN'
+    where c.code in ('FOI', 'CFE')
+    on conflict (permit_type, company_id, site_id)
+    do update set
+      retain_indefinitely = true,
+      active = true;
+
+  end if;
+end $$;

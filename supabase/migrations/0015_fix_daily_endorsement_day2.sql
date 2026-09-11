@@ -1,4 +1,7 @@
+-- =========================================================
 -- Migration 0015: Fix Day 2-14 Daily Endorsement Submit Error
+-- (Aligned with 0016 SRM coverage rule)
+-- =========================================================
 
 drop function if exists public.permit_endorse_day(
   uuid,
@@ -51,6 +54,9 @@ declare
 
   v_clean_remarks text;
 begin
+  -- =====================================================
+  -- AUTHENTICATION
+  -- =====================================================
   v_user_id := auth.uid();
 
   if v_user_id is null then
@@ -79,14 +85,20 @@ begin
     raise exception 'User account is inactive';
   end if;
 
+  -- =====================================================
+  -- BASIC VALIDATION
+  -- =====================================================
   if p_day < 2 or p_day > 14 then
     raise exception 'Daily endorsement day must be between Day 2 and Day 14';
   end if;
 
-  if p_action in ('reject', 'revoke') and v_clean_remarks is null then
+  if p_action in ('reject','revoke') and v_clean_remarks is null then
     raise exception 'Remarks are required for reject/revoke endorsement';
   end if;
 
+  -- =====================================================
+  -- LOAD PERMIT
+  -- =====================================================
   select
     p.state,
     p.company_id,
@@ -107,42 +119,42 @@ begin
     raise exception 'Permit not found';
   end if;
 
-  if not (
-    v_user_role = 'admin'
-    or v_user_role = 'srm'
-    or 'hot_work_srm' = any(v_user_qualified_for)
-    or (
-      v_company_id is not null
-      and v_site_id is not null
-      and public.has_site_role(v_company_id, v_site_id, 'srm')
-    )
-  ) then
-    raise exception 'Only qualified SRM users can submit daily endorsements';
+  -- =====================================================
+  -- 🔥 KEY FIX (ALIGN WITH 0016)
+  -- =====================================================
+  if not public.can_act_as_srm_for_permit(p_permit_id) then
+    raise exception 'Only authorised SRM (site-based) can endorse';
   end if;
 
-  if v_from_state not in ('approved_active', 'pending_daily_endorsement') then
-    raise exception 'Permit is not active for daily endorsement. Current state: %', v_from_state;
+  -- =====================================================
+  -- STATE VALIDATION
+  -- =====================================================
+  if v_from_state not in ('approved_active','pending_daily_endorsement') then
+    raise exception 'Permit is not active (state: %)', v_from_state;
   end if;
 
   if v_commencement is null or v_completion is null then
-    raise exception 'Permit commencement and completion dates are required';
+    raise exception 'Permit dates are required';
   end if;
 
   if v_completion < v_commencement then
-    raise exception 'Permit completion date cannot be earlier than commencement date';
+    raise exception 'Invalid date range';
   end if;
 
+  -- =====================================================
+  -- DAY CALCULATION
+  -- =====================================================
   v_total_days := (v_completion - v_commencement) + 1;
 
   if v_total_days <= 1 then
-    raise exception 'Single-day permits do not require Day 2-14 endorsement';
+    raise exception 'Single-day permit does not require endorsement';
   end if;
 
   v_max_endorsement_day := least(v_total_days, 14);
 
   if p_day > v_max_endorsement_day then
     raise exception
-      'Invalid endorsement day. Permit only requires Day 2 to Day % endorsements',
+      'Invalid endorsement day. Max allowed Day: %',
       v_max_endorsement_day;
   end if;
 
@@ -150,40 +162,40 @@ begin
   v_current_day := (v_today - v_commencement) + 1;
 
   if v_today < v_target_date then
-    raise exception
-      'Future endorsement is not allowed. Day % can only be endorsed on %',
-      p_day,
-      v_target_date;
+    raise exception 'Future endorsement is not allowed';
   end if;
 
   if v_today > v_target_date then
-    raise exception
-      'Backdated endorsement is not allowed. Day % endorsement date was %',
-      p_day,
-      v_target_date;
+    raise exception 'Backdated endorsement is not allowed';
   end if;
 
   if p_day <> v_current_day then
     raise exception
-      'Invalid endorsement day. Today is Day %, but submitted Day %',
+      'Invalid endorsement day. Today is Day %, submitted Day %',
       v_current_day,
       p_day;
   end if;
 
+  -- =====================================================
+  -- DUPLICATE CHECK
+  -- =====================================================
   select count(*)
   into v_existing_count
-  from public.permit_endorsements pe
-  where pe.permit_id = p_permit_id
-    and pe.day_number = p_day;
+  from public.permit_endorsements
+  where permit_id = p_permit_id
+    and day_number = p_day;
 
   if v_existing_count > 0 then
-    raise exception 'Day % has already been endorsed', p_day;
+    raise exception 'Day % already endorsed', p_day;
   end if;
 
+  -- =====================================================
+  -- SEQUENTIAL VALIDATION
+  -- =====================================================
   if p_day > 2 then
     select count(*)
     into v_missing_previous_days
-    from generate_series(2, p_day - 1) as d(day_number)
+    from generate_series(2, p_day - 1) d(day_number)
     where not exists (
       select 1
       from public.permit_endorsements pe
@@ -193,12 +205,13 @@ begin
     );
 
     if v_missing_previous_days > 0 then
-      raise exception
-        'Previous daily endorsements must be completed before Day %',
-        p_day;
+      raise exception 'Previous days must be endorsed first';
     end if;
   end if;
 
+  -- =====================================================
+  -- INSERT ENDORSEMENT
+  -- =====================================================
   insert into public.permit_endorsements (
     permit_id,
     day_number,
@@ -216,30 +229,35 @@ begin
     now()
   );
 
+  -- =====================================================
+  -- STATE TRANSITION
+  -- =====================================================
   if p_action = 'continue' then
     if p_day >= v_max_endorsement_day then
-      v_to_state := 'pending_closure'::public.permit_state;
+      v_to_state := 'pending_closure';
     else
-      v_to_state := 'pending_daily_endorsement'::public.permit_state;
+      v_to_state := 'pending_daily_endorsement';
     end if;
 
-    v_audit_action := 'endorsed_continue'::public.audit_action;
+    v_audit_action := 'endorsed_continue';
 
   elsif p_action = 'reject' then
-    v_to_state := 'revoked'::public.permit_state;
-    v_audit_action := 'endorsed_reject'::public.audit_action;
+    v_to_state := 'revoked';
+    v_audit_action := 'endorsed_reject';
 
   else
-    v_to_state := 'revoked'::public.permit_state;
-    v_audit_action := 'endorsed_revoke'::public.audit_action;
+    v_to_state := 'revoked';
+    v_audit_action := 'endorsed_revoke';
   end if;
 
   update public.permits
-  set
-    state = v_to_state,
-    updated_at = now()
+  set state = v_to_state,
+      updated_at = now()
   where id = p_permit_id;
 
+  -- =====================================================
+  -- AUDIT
+  -- =====================================================
   perform public.write_audit(
     p_permit_id,
     v_audit_action,
@@ -249,26 +267,24 @@ begin
     jsonb_build_object(
       'day_number', p_day,
       'action', p_action::text,
-      'remarks', v_clean_remarks,
+      'today', v_today,
       'target_date', v_target_date,
-      'today_singapore', v_today,
       'current_day', v_current_day,
-      'total_days', v_total_days,
-      'max_endorsement_day', v_max_endorsement_day
+      'leave_coverage_enabled', true,
+      'endorser_id', v_user_id
     )
   );
 
+  -- =====================================================
+  -- RETURN
+  -- =====================================================
   return jsonb_build_object(
     'permit_id', p_permit_id,
     'day_number', p_day,
     'action', p_action::text,
     'from_state', v_from_state::text,
-    'to_state', v_to_state::text,
-    'target_date', v_target_date,
-    'today_singapore', v_today,
-    'current_day', v_current_day,
-    'total_days', v_total_days,
-    'max_endorsement_day', v_max_endorsement_day
+    'to_state', v_to_state::text
   );
+
 end;
 $$;
