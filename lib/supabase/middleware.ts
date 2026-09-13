@@ -14,21 +14,17 @@ export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(SUPABASE_URL(), SUPABASE_ANON_KEY(), {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet: CookieToSet[]) {
-        cookiesToSet.forEach(({ name, value }: CookieToSet) =>
-          request.cookies.set(name, value),
-        );
-        response = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }: CookieToSet) =>
-          response.cookies.set(name, value, options),
-        );
-      },
+  cookies: {
+    getAll() {
+      return request.cookies.getAll();
     },
-  });
+    setAll(cookiesToSet: CookieToSet[]) {
+      cookiesToSet.forEach(({ name, value, options }) => {
+        response.cookies.set(name, value, options);
+      });
+    },
+  },
+});
 
   const {
     data: { user },
