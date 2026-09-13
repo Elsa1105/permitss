@@ -46,6 +46,6 @@ export async function createServerSupabase() {
  */
 export function createServiceRoleSupabase() {
   return createClient(SUPABASE_URL(), SUPABASE_SERVICE_ROLE_KEY(), {
-    auth: { persistSession: false, autoRefreshToken: false },
+    auth: { persistSession: true, autoRefreshToken: false },
   });
 }
