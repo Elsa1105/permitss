@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+
 const PUBLIC_PATHS = ["/login", "/auth/callback", "/public", "/api/public"];
 
 export async function updateSession(request: NextRequest) {
@@ -30,25 +31,13 @@ export async function updateSession(request: NextRequest) {
   const user = session?.user ?? null;
   const path = request.nextUrl.pathname;
 
-  console.log("PATH:", path);
-  console.log("USER:", user);
-
   const isPublic = PUBLIC_PATHS.some(
     (p) => path === p || path.startsWith(`${p}/`)
   );
 
-  // ✅ public route
   if (isPublic) return response;
 
-  // ❌ belum login
   if (!user) {
-    if (path.startsWith("/api/")) {
-      return new NextResponse(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", path);
