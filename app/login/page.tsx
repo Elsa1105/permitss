@@ -8,10 +8,13 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string; inactive?: string }>;
 }) {
   const supabase = await createServerSupabase();
-  const { data } = await supabase.auth.getUser();
-  if (data.user) redirect("/dashboard");
-
+  const { data } = await supabase.auth.getUser(); 
   const { next, inactive } = await searchParams;
+
+// hanya redirect kalau ada next DAN bukan login page
+if (data.user && next && next !== "/login") {
+  redirect(next);
+}
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-100 to-blue-50">
       <div className="w-full max-w-md">
