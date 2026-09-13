@@ -40,23 +40,27 @@ export async function updateSession(request: NextRequest) {
   console.log("USER:", user);
 
   const isPublic = PUBLIC_PATHS.some(
-    (p) => path === p || path.startsWith(`${p}/`),
-  );
+  (p) => path === p || path.startsWith(`${p}/`)
+);
 
-  if (!user && !isPublic && path !== "/") {
-    // API routes: respond with JSON 401 so fetch() callers see a proper error.
-    if (path.startsWith("/api/")) {
-      return new NextResponse(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { "Content-Type": "application/json" } },
-      );
-    }
-    // Page routes: redirect to login with a `next` param.
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("next", path);
-    return NextResponse.redirect(url);
+
+if (isPublic) {
+  return response;
+}
+
+if (!user && path !== "/") {
+  if (path.startsWith("/api/")) {
+    return new NextResponse(
+      JSON.stringify({ error: "Unauthorized" }),
+      { status: 401, headers: { "Content-Type": "application/json" } }
+    );
   }
 
-  return response;
+  const url = request.nextUrl.clone();
+  url.pathname = "/login";
+  url.searchParams.set("next", path);
+  return NextResponse.redirect(url);
+}
+
+return response;
 }
