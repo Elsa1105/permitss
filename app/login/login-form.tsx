@@ -19,12 +19,16 @@ export function LoginForm({ next }: { next: string }) {
     try {
       const supabase = createBrowserSupabase();
       const { error } = await supabase.auth.signInWithPassword({ email, password });
+
       if (error) {
         toast.error(error.message);
         return;
       }
-      toast.success("Signed in");
-      router.push(next);
+
+      // 🔥 PENTING: tunggu sedikit biar cookie ke-set
+      await new Promise((r) => setTimeout(r, 100));
+
+      router.replace(next);
       router.refresh();
     } finally {
       setLoading(false);
