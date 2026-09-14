@@ -18,18 +18,23 @@ export function LoginForm({ next }: { next: string }) {
     setLoading(true);
     try {
       const supabase = createBrowserSupabase();
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+     const { error } = await supabase.auth.signInWithPassword({
+  email,
+  password,
+});
 
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
+if (error) {
+  toast.error(error.message);
+  return;
+}
 
-      // 🔥 PENTING: tunggu sedikit biar cookie ke-set
-      await new Promise((r) => setTimeout(r, 100));
+// 🔥 WAJIB BANGET
+await new Promise((r) => setTimeout(r, 500));
 
-      router.replace(next);
-      router.refresh();
+// 🔥 HARUS RELOAD FLOW
+router.replace(next || "/dashboard");
+router.refresh(); 
+      
     } finally {
       setLoading(false);
     }

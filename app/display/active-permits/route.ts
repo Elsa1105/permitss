@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createServiceRoleSupabase } from "@/lib/supabase/server";
+import { createServerSupabase } from "@/lib/supabase/server";
+
 
 const ACTIVE_STATES = [
   "approved_active",
@@ -8,7 +9,7 @@ const ACTIVE_STATES = [
 ];
 
 export async function GET() {
-  const supabase = createServiceRoleSupabase();
+const supabase = await createServerSupabase();
 
   const { data, error } = await supabase
     .from("permits")
@@ -30,9 +31,13 @@ export async function GET() {
           name
         ),
         site:site_id (
+        code,
+        name,
+        company:company_id (
           code,
           name
         )
+      )
       `,
     )
     .in("state", ACTIVE_STATES)

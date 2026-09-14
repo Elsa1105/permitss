@@ -16,8 +16,14 @@ const PERMIT_WITH_JOINS = `
   assessor:assessor_id ( id, full_name, department, email ),
   srm:srm_id ( id, full_name, department, email ),
   closer:closer_id ( id, full_name, department, email ),
-  company:company_id ( id, code, name ),
-  site:site_id ( id, code, name )
+
+  -- ✅ FIX: ambil company lewat site
+  site:site_id (
+    id,
+    code,
+    name,
+    company:company_id ( id, code, name )
+  )
 `;
 
 export async function listPermits(opts?: {
@@ -74,8 +80,9 @@ export async function getPermit(
     .maybeSingle();
 
   if (error) {
-    throw error;
-  }
+  console.error("SUPABASE ERROR:", error);
+  throw new Error(error.message);
+}
 
   return (data as unknown as PermitWithJoins) ?? null;
 }
