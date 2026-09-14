@@ -374,7 +374,7 @@ async function assignSiteRole({
   const { data: site, error: siteError } = await admin
     .from("sites")
     .select("id")
-    .eq("company_id", company.id)
+    .eq("site.company_id", company.id)
     .eq("code", row.site_code)
     .eq("active", true)
     .single();

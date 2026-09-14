@@ -128,8 +128,7 @@ async function getRecipientsByRole(
       role,
       user:user_id (id,email,full_name,role)
     `)
-    .eq("company_id", permit.company_id)
-    .eq("site_id", permit.site_id)
+    .eq("site.company_id", permit.company_id)
     .eq("active", true);
 
   if (error) {

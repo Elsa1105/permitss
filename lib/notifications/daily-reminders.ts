@@ -210,7 +210,7 @@ export async function sendSrmEndorsementReminders(supabase: SupabaseClient) {
     const { data: srmRoles, error: srmError } = await supabase
       .from("user_site_roles")
       .select("user:user_id ( id, email, full_name )")
-      .eq("company_id", companyId)
+      .eq("site.company_id", companyId)
       .eq("site_id", siteId)
       .eq("role", "srm")
       .eq("active", true);
