@@ -17,12 +17,15 @@ const PERMIT_WITH_JOINS = `
   srm:srm_id ( id, full_name, department, email ),
   closer:closer_id ( id, full_name, department, email ),
 
-  -- ✅ FIX: ambil company lewat site
   site:site_id (
     id,
     code,
     name,
-    company:company_id ( id, code, name )
+    company:company_id (
+      id,
+      code,
+      name
+    )
   )
 `;
 
