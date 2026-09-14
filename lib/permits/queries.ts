@@ -16,7 +16,6 @@ const PERMIT_WITH_JOINS = `
   assessor:assessor_id ( id, full_name, department, email ),
   srm:srm_id ( id, full_name, department, email ),
   closer:closer_id ( id, full_name, department, email ),
-
   site:site_id (
     id,
     code,
@@ -28,7 +27,6 @@ const PERMIT_WITH_JOINS = `
     )
   )
 `;
-
 export async function listPermits(opts?: {
   state?: PermitRow["state"][];
   applicantId?: string;
@@ -52,7 +50,7 @@ export async function listPermits(opts?: {
   // permits), regardless of who the applicant was. Takes priority over
   // applicantId, which scopes to a single user's own permits.
   if (opts?.companyId) {
-    q = q.eq("company_id", opts.companyId);
+    q = q.eq("site.company_id", opts.companyId);
   } else if (opts?.applicantId) {
     q = q.eq("applicant_id", opts.applicantId);
   }
