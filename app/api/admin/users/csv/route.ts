@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   createServerSupabase,
-  createServiceRoleSupabase,
+  createAdminSupabase,
 } from "@/lib/supabase/server";
 import type { UserRole } from "@/lib/supabase/types";
 
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
   const csvText = await file.text();
   const { rows, errors: parseErrors } = parseCsv(csvText);
 
-  const admin = createServiceRoleSupabase();
+  const admin = createAdminSupabase();
   const errors: ImportError[] = [...parseErrors];
 
   let invited = 0;
@@ -237,7 +237,7 @@ function sleep(ms: number) {
 }
 
 async function createUserDirect(
-  admin: ReturnType<typeof createServiceRoleSupabase>,
+  admin: ReturnType<typeof createAdminSupabase>,
   row: ParsedRow,
 ) {
   return admin.auth.admin.createUser({
@@ -356,7 +356,7 @@ async function assignSiteRole({
   row,
   userId,
 }: {
-  admin: ReturnType<typeof createServiceRoleSupabase>;
+  admin: ReturnType<typeof createAdminSupabase>;
   row: ParsedRow;
   userId: string;
 }) {
@@ -372,12 +372,12 @@ async function assignSiteRole({
   }
 
   const { data: site, error: siteError } = await admin
-    .from("sites")
-    .select("id")
-    .eq("site.company_id", company.id)
-    .eq("code", row.site_code)
-    .eq("active", true)
-    .single();
+  .from("sites")
+  .select("id")
+  .eq("company_id", company.id) // ✅ FIX: pakai company.id
+  .eq("code", row.site_code)
+  .eq("active", true)
+  .single();
 
   if (siteError || !site) {
     throw new Error(

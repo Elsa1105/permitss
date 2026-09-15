@@ -27,6 +27,7 @@ const PERMIT_WITH_JOINS = `
     )
   )
 `;
+
 export async function listPermits(opts?: {
   state?: PermitRow["state"][];
   applicantId?: string;
