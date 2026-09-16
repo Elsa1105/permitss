@@ -12,10 +12,10 @@ import type {
 
 const PERMIT_WITH_JOINS = `
   *,
-  applicant:applicant_id ( id, full_name, department, email ),
-  assessor:assessor_id ( id, full_name, department, email ),
-  srm:srm_id ( id, full_name, department, email ),
-  closer:closer_id ( id, full_name, department, email ),
+  applicant:applicant_id (id, full_name, department, email),
+  assessor:assessor_id (id, full_name, department, email),
+  srm:srm_id (id, full_name, department, email),
+  closer:closer_id (id, full_name, department, email),
   site:site_id (
     id,
     code,
@@ -51,7 +51,14 @@ export async function listPermits(opts?: {
   // permits), regardless of who the applicant was. Takes priority over
   // applicantId, which scopes to a single user's own permits.
   if (opts?.companyId) {
-  q = q.eq("site_id.company_id", opts.companyId);
+  const { data: sites } = await supabase
+    .from("sites")
+    .select("id")
+    .eq("company_id", opts.companyId);
+
+  const siteIds = (sites ?? []).map((s) => s.id);
+
+  q = q.in("site_id", siteIds);
   } else if (opts?.applicantId) {
     q = q.eq("applicant_id", opts.applicantId);
   }

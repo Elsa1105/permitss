@@ -2,6 +2,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATHS = ["/login", "/auth/callback", "/public"];
+const MAINTENANCE_MODE = process.env.MAINTENANCE_MODE === "true";
 
 type CookieToSet = {
   name: string;
@@ -12,13 +13,21 @@ type CookieToSet = {
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next();
 
+  const path = request.nextUrl.pathname;
+
+  // 🚧 MAINTENANCE MODE (taruh paling atas)
+  if (MAINTENANCE_MODE && !path.startsWith("/maintenance")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/maintenance";
+    return NextResponse.rewrite(url);
+  }
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll: () => request.cookies.getAll(),
-
         setAll: (cookiesToSet: CookieToSet[]) => {
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options);
@@ -28,12 +37,9 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // 🔥 WAJIB pakai ini (bukan getUser)
   const {
     data: { session },
   } = await supabase.auth.getSession();
-
-  const path = request.nextUrl.pathname;
 
   const isPublic = PUBLIC_PATHS.some(
     (p) => path === p || path.startsWith(p)
