@@ -13,6 +13,9 @@ export const viewport: Viewport = {
   maximumScale: 1,
 };
 
+// 🔥 toggle maintenance di sini
+const MAINTENANCE = true;
+
 export default function RootLayout({
   children,
 }: {
@@ -21,7 +24,16 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-slate-50 text-slate-900">
+        
+        {/* 🚧 MAINTENANCE BANNER */}
+        {MAINTENANCE && (
+          <div className="bg-yellow-500 text-black text-center p-2 text-sm font-medium">
+            🚧 WEB APP IS UNDER MAINTENANCE — some features may not work
+          </div>
+        )}
+
         {children}
+
         <Toaster position="top-right" richColors closeButton />
       </body>
     </html>
