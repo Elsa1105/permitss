@@ -13,7 +13,7 @@ type PermitEmailEvent =
   | "daily_endorsement"
   | "daily_endorsement_reminder"
   | "stage4_closed"
-  | "closure_reminder"; // ✅ NEW
+  | "closure_reminder";
 
 type NotifyPermitInput = {
   supabase: SupabaseClient;
@@ -32,8 +32,6 @@ type PermitRow = {
   description: string;
   company_id: string | null;
   site_id: string | null;
-
-  // ✅ IMPORTANT (FIX)
   applicant_id: string | null;
   assessor_id: string | null;
   srm_id: string | null;
@@ -86,23 +84,30 @@ async function getPermit(supabase: SupabaseClient, id: string) {
 }
 
 async function getCompany(supabase: SupabaseClient, id: string | null) {
-  if (!id) return null;
+  if (!id) {
+    console.error("❌ company_id is null");
+    return null;
+  }
 
   const { data, error } = await supabase
     .from("companies")
     .select("id, code, name")
     .eq("id", id)
-    .single();
+    .maybeSingle(); // 🔥 FIX
 
   if (error) {
     console.error("getCompany ERROR:", error);
     return null;
   }
 
-  return data as CompanyRow;
+  if (!data) {
+    console.error("❌ company not found:", id);
+  }
+
+  return data as CompanyRow | null;
 }
 
-/* ================= ASSIGNED USERS (FIX) ================= */
+/* ================= USERS ================= */
 
 async function getAssignedUsers(
   supabase: SupabaseClient,
@@ -151,7 +156,7 @@ function resolveRolesByEvent(event: PermitEmailEvent): string[] {
     case "daily_endorsement_reminder":
       return ["srm"];
 
-    case "closure_reminder": // ✅ NEW
+    case "closure_reminder":
       return ["applicant"];
 
     default:
@@ -176,7 +181,7 @@ function getGroupEmails(company: CompanyRow | null) {
     return [
       "srm@franklin.com.sg",
       "assessor@franklin.com.sg",
-      // no applicant group
+      // ❌ no applicant group
     ];
   }
 
@@ -218,15 +223,28 @@ function permitUrl(id: string) {
 export async function notifyPermitEvent(input: NotifyPermitInput) {
   const permit = await getPermit(input.supabase, input.permitId);
 
-if (!permit) {
-  console.error("❌ PERMIT NOT FOUND", input.permitId);
-  return;
-}
+  if (!permit) {
+    console.error("❌ PERMIT NOT FOUND", input.permitId);
+    return;
+  }
 
   const company = await getCompany(input.supabase, permit.company_id);
   if (!company) return;
 
-  const assignedUsers = await getAssignedUsers(input.supabase, permit);
+  let assignedUsers = await getAssignedUsers(input.supabase, permit);
+
+  // 🔥 FALLBACK kalau belum assign
+  if (assignedUsers.length === 0) {
+    console.warn("⚠️ fallback: using company users");
+
+    const { data } = await input.supabase
+      .from("users")
+      .select("id, email, full_name, role")
+      .eq("company_id", permit.company_id)
+      .eq("active", true);
+
+    assignedUsers = data || [];
+  }
 
   const targetRoles = resolveRolesByEvent(input.event);
   const groupEmails = getGroupEmails(company);
@@ -254,7 +272,18 @@ if (!permit) {
     }
   }
 
+  // 🔥 FORCE applicant (biar gak pernah miss)
+  const applicantUsers = filterByRole(assignedUsers, "applicant");
+  emails.push(...applicantUsers.map((u) => u.email!));
+
   emails = uniqueEmails(emails);
+
+  console.log("EMAIL DEBUG:", {
+    permitId: permit.id,
+    event: input.event,
+    company: company.code,
+    emails,
+  });
 
   if (!emails.length) {
     console.log("NO RECIPIENT", {
