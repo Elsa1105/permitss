@@ -71,15 +71,9 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
     currentUser.role === "guest_applicant" ||
     currentUser.role === "contractor";
 
-  const firstCompanyId = companies[0]?.id ?? "";
-  const firstSiteId =
-    sites.find((site) => site.company_id === firstCompanyId)?.id ??
-    sites[0]?.id ??
-    "";
-
   const [form, setForm] = React.useState<ExtendedNewPermitInput>({
-    company_id: firstCompanyId,
-    site_id: firstSiteId,
+    company_id: "",
+    site_id: "",
 
     display_applicant_name:
       currentUser.full_name?.trim() || currentUser.id || "",
@@ -101,6 +95,20 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
     worker_briefing_acknowledged: false,
     top_controls_summary: "",
   });
+
+  React.useEffect(() => {
+    if (!form.company_id && companies.length > 0) {
+      const firstCompanyId = companies[0].id;
+      const firstSite = sites.find((s) => s.company_id === firstCompanyId);
+
+      setForm((current) => ({
+        ...current,
+        company_id: firstCompanyId,
+        site_id: firstSite?.id ?? "",
+      }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [submitting, setSubmitting] = React.useState(false);
@@ -313,16 +321,22 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
               <span className="field-label field-required">Site</span>
 
               <select
-                className="input"
-                value={form.site_id}
-                onChange={(e) => set("site_id", e.target.value)}
-              >
-                {filteredSites.map((site) => (
+              className="input"
+              value={form.site_id}
+              onChange={(e) => set("site_id", e.target.value)}
+            >
+              <option value="">Select site</option>
+
+              {filteredSites.length === 0 ? (
+                <option disabled>No site available</option>
+              ) : (
+                filteredSites.map((site) => (
                   <option key={site.id} value={site.id}>
                     {site.code} - {site.name}
                   </option>
-                ))}
-              </select>
+                ))
+              )}
+            </select>
 
               {errors.site_id ? (
                 <p className="text-xs text-red-600">{errors.site_id}</p>

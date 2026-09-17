@@ -9,6 +9,7 @@ import type {
   PermitStageRow,
   PermitWithJoins,
 } from "@/lib/supabase/types";
+import { createServiceRoleSupabase } from "@/lib/supabase/server";
 
 const PERMIT_WITH_JOINS = `
   *,
@@ -174,34 +175,57 @@ export async function getPermitDocuments(
   return (data ?? []) as PermitDocumentRow[];
 }
 
-export async function getCompaniesAndSites() {
-  const supabase = await createServerSupabase();
 
-  const [{ data: companies, error: companiesError }, { data: sites, error: sitesError }] =
-    await Promise.all([
-      supabase
-        .from("companies")
-        .select("*")
-        .eq("active", true)
-        .order("code", { ascending: true }),
+export async function getCompaniesAndSites(userId: string) {
+  const supabase = createServiceRoleSupabase();
 
-      supabase
-        .from("sites")
-        .select("*")
-        .eq("active", true)
-        .order("code", { ascending: true }),
-    ]);
+  const { data: roles, error } = await supabase
+    .from("user_site_roles")
+    .select("company_id, site_id")
+    .eq("user_id", userId)
+    .eq("active", true);
 
-  if (companiesError) {
-    throw companiesError;
+  if (error) throw error;
+
+  const companyIds = [
+    ...new Set((roles ?? []).map((r) => r.company_id).filter(Boolean)),
+  ];
+  const siteIds = [
+    ...new Set((roles ?? []).map((r) => r.site_id).filter(Boolean)),
+  ];
+
+  if (companyIds.length === 0) {
+    return { companies: [], sites: [] };
   }
 
-  if (sitesError) {
-    throw sitesError;
+  const { data: companies } = await supabase
+    .from("companies")
+    .select("*")
+    .in("id", companyIds)
+    .eq("active", true);
+
+  let sitesData = [];
+
+  if (siteIds.length > 0) {
+    const { data } = await supabase
+      .from("sites")
+      .select("*")
+      .in("id", siteIds)
+      .eq("active", true);
+
+    sitesData = data ?? [];
+  } else {
+    const { data } = await supabase
+      .from("sites")
+      .select("*")
+      .in("company_id", companyIds)
+      .eq("active", true);
+
+    sitesData = data ?? [];
   }
 
   return {
     companies: companies ?? [],
-    sites: sites ?? [],
+    sites: sitesData,
   };
 }

@@ -43,7 +43,7 @@ type SiteRoleWithJoins = UserSiteRoleRow & {
 export default async function AdminUsersPage() {
   const currentAdmin = await requireAdmin();
 
-  const supabase = await createServerSupabase();
+  const supabase = createServiceRoleSupabase();
 
   const [usersResult, companiesResult, sitesResult, siteRolesResult] =
     await Promise.all([
@@ -180,29 +180,25 @@ export default async function AdminUsersPage() {
                 </select>
               </label>
 
-              <div className="field">
-                <span className="field-label field-required">
-                  Company access
-                </span>
-                <div className="flex flex-wrap gap-2 mt-1">
+              {/* COMPANY ACCESS */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Company access <span className="text-red-500">*</span>
+                </label>
+
+                <div className="flex gap-4">
                   {companies.map((company) => (
-                    <label
-                      key={company.id}
-                      className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                    >
+                    <label key={company.id} className="flex items-center gap-2">
                       <input
-                        type="checkbox"
-                        name="company_id"
-                        value={company.id}
-                      />
-                      <span>{company.code}</span>
+                      type="checkbox"
+                      name="company_id[]"
+                      value={company.id}
+                      className="h-4 w-4"
+                    />
+                      {company.code}
                     </label>
                   ))}
                 </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  Tick FOI, CFE, or both — Assessors and SRMs will only see
-                  and act on permits for the company/site(s) selected here.
-                </p>
               </div>
 
               <label className="field">
@@ -330,54 +326,42 @@ async function addSiteRole(formData: FormData) {
   "use server";
 
   await requireAdmin();
+  const supabase = await createServerSupabase();
 
-  const userId = String(formData.get("user_id") ?? "");
-  // Company access is now a checkbox group — FOI, CFE, or both can be
-  // selected at once, per Alex's request.
+  const userId = String(formData.get("user_id") || "");
   const companyIds = formData
-    .getAll("company_id")
-    .map((value) => String(value))
+    .getAll("company_id[]")
+    .map((v) => String(v))
     .filter(Boolean);
-  const role = String(formData.get("role") ?? "") as UserRole;
+  const role = String(formData.get("role") || "");
 
-  if (!userId || companyIds.length === 0 || !role) {
-    throw new Error("User, at least one company, and role are required.");
-  }
+  if (!userId) throw new Error("User not selected");
+  if (companyIds.length === 0) throw new Error("Please select at least one company");
+  if (!role) throw new Error("Role not selected");
 
-  if (!ROLE_VALUES.includes(role)) {
-    throw new Error("Invalid role.");
-  }
+  for (const companyId of companyIds) {
+    const { data: sites } = await supabase
+      .from("sites")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("active", true);
 
-  const service = createServiceRoleSupabase();
+    if (!sites || sites.length === 0) continue;
 
-  const { data: sites, error: sitesError } = await service
-    .from("sites")
-    .select("id, company_id")
-    .in("company_id", companyIds)
-    .eq("active", true);
-
-  if (sitesError) {
-    throw new Error(sitesError.message);
-  }
-
-  if (!sites || sites.length === 0) {
-    throw new Error("No active sites found for the selected company/companies.");
-  }
-
-  const rows = sites.map((site) => ({
-    user_id: userId,
-    company_id: site.company_id,
-    site_id: site.id,
-    role,
-    active: true,
-  }));
-
-  const { error } = await service
-    .from("user_site_roles")
-    .upsert(rows, { onConflict: "user_id,company_id,site_id,role" });
-
-  if (error) {
-    throw new Error(error.message);
+    for (const site of sites) {
+      await supabase.from("user_site_roles").upsert(
+        {
+          user_id: userId,
+          company_id: companyId,
+          site_id: site.id,
+          role,
+          active: true,
+        },
+        {
+          onConflict: "user_id,company_id,site_id,role",
+        },
+      );
+    }
   }
 
   revalidatePath("/admin/users");

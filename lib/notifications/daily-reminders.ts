@@ -208,12 +208,12 @@ export async function sendSrmEndorsementReminders(supabase: SupabaseClient) {
     const [companyId, siteId] = key.split(":");
 
     const { data: srmRoles, error: srmError } = await supabase
-      .from("user_site_roles")
-      .select("user:user_id ( id, email, full_name )")
-      .eq("site.company_id", companyId)
-      .eq("site_id", siteId)
-      .eq("role", "srm")
-      .eq("active", true);
+    .from("user_site_roles")
+    .select("user:user_id ( id, email, full_name )")
+    .eq("company_id", companyId)
+    .eq("site_id", siteId)
+    .eq("role", "srm")
+    .eq("active", true);
 
     if (srmError) {
       console.error("[REMINDER] Failed to load SRMs for site", key, srmError);

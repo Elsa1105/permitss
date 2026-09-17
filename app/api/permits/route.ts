@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase/server";
+import { createServerSupabase, createServiceRoleSupabase } from "@/lib/supabase/server";
 import { NewPermitSchema } from "@/lib/permits/schemas";
+import { notifyPermitEvent } from "@/lib/notifications/permit-emails";
 
 const ALLOWED_CREATOR_ROLES = new Set([
   "applicant",
@@ -12,6 +13,7 @@ const ALLOWED_CREATOR_ROLES = new Set([
 
 export async function POST(request: Request) {
   const supabase = await createServerSupabase();
+  const serviceSupabase = createServiceRoleSupabase();
 
   const { data: auth } = await supabase.auth.getUser();
 
@@ -117,7 +119,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const { data: company, error: companyError } = await supabase
+  const { data: company, error: companyError } = await serviceSupabase
     .from("companies")
     .select("code")
     .eq("id", payload.company_id)
@@ -130,15 +132,12 @@ export async function POST(request: Request) {
     );
   }
 
-  const permitNumberType =
-    company.code?.trim().toUpperCase() === "CFE"
-      ? "hot_work_onshore_cfe"
-      : "hot_work_onshore";
+  const companyCode = company.code?.trim().toUpperCase() || "GEN";
 
-  const { data: serialData, error: serialErr } = await supabase.rpc(
-    "next_permit_serial",
-    { p_permit_type: permitNumberType },
-  );
+const { data: serialData, error: serialErr } = await serviceSupabase.rpc(
+  "next_permit_serial",
+  { p_permit_type: `hot_work_onshore_${companyCode.toLowerCase()}` },
+);
 
   if (serialErr || !serialData) {
     return NextResponse.json(
@@ -147,7 +146,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const insert = await supabase
+  const insert = await serviceSupabase
     .from("permits")
     .insert({
       serial_no: serialData as string,
@@ -193,7 +192,43 @@ export async function POST(request: Request) {
     );
   }
 
-  await supabase.rpc("write_audit", {
+  await serviceSupabase.rpc("write_audit", {
+    p_permit_id: insert.data.id,
+    p_action: isGuestApplicant ? "created_by_guest_applicant" : "created",
+    p_from: null,
+    p_to: "draft",
+    p_reason: null,
+    p_metadata: {
+      actor_role: currentUser.role,
+      company_id: payload.company_id,
+      site_id: payload.site_id,
+
+      display_applicant_name: payload.display_applicant_name || null,
+      display_applicant_department:
+        payload.display_applicant_department || null,
+      job_type: payload.job_type,
+
+      hazard_types: payload.hazard_types,
+      other_hazard_text: payload.other_hazard_text || null,
+
+      contractor_company: payload.contractor_company || null,
+      contractor_supervisor_name:
+        payload.contractor_supervisor_name || null,
+      contractor_supervisor_registration_no:
+        payload.contractor_supervisor_registration_no || null,
+      worker_briefing_acknowledged:
+        payload.worker_briefing_acknowledged ?? false,
+      top_controls_summary: payload.top_controls_summary || null,
+    },
+  });
+
+  await notifyPermitEvent({
+    supabase: serviceSupabase,
+    permitId: insert.data.id,
+    event: "stage1_submitted",
+  });
+
+  await serviceSupabase.rpc("write_audit", {
     p_permit_id: insert.data.id,
     p_action: isGuestApplicant ? "created_by_guest_applicant" : "created",
     p_from: null,

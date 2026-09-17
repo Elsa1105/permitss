@@ -11,7 +11,9 @@ type PermitEmailEvent =
   | "stage3_approved"
   | "stage3_rejected"
   | "daily_endorsement"
-  | "stage4_closed";
+  | "daily_endorsement_reminder"
+  | "stage4_closed"
+  | "closure_reminder"; // ✅ NEW
 
 type NotifyPermitInput = {
   supabase: SupabaseClient;
@@ -30,6 +32,11 @@ type PermitRow = {
   description: string;
   company_id: string | null;
   site_id: string | null;
+
+  // ✅ IMPORTANT (FIX)
+  applicant_id: string | null;
+  assessor_id: string | null;
+  srm_id: string | null;
 };
 
 type UserRow = {
@@ -64,25 +71,68 @@ function uniqueEmails(list: string[]) {
 /* ================= DB ================= */
 
 async function getPermit(supabase: SupabaseClient, id: string) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("permits")
     .select("*")
     .eq("id", id)
     .single();
 
-  return data as PermitRow | null;
+  if (error) {
+    console.error("getPermit ERROR:", error);
+    return null;
+  }
+
+  return data as PermitRow;
 }
 
 async function getCompany(supabase: SupabaseClient, id: string | null) {
   if (!id) return null;
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("companies")
     .select("id, code, name")
     .eq("id", id)
     .single();
 
-  return data as CompanyRow | null;
+  if (error) {
+    console.error("getCompany ERROR:", error);
+    return null;
+  }
+
+  return data as CompanyRow;
+}
+
+/* ================= ASSIGNED USERS (FIX) ================= */
+
+async function getAssignedUsers(
+  supabase: SupabaseClient,
+  permit: PermitRow
+) {
+  const ids = [
+    permit.applicant_id,
+    permit.assessor_id,
+    permit.srm_id,
+  ].filter(Boolean);
+
+  if (ids.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, email, full_name, role")
+    .in("id", ids);
+
+  if (error) {
+    console.error("getAssignedUsers ERROR:", error);
+    return [];
+  }
+
+  return data as UserRow[];
+}
+
+function filterByRole(users: UserRow[], role: string) {
+  return users.filter(
+    (u) => normalizeRole(u.role) === role && u.email
+  );
 }
 
 /* ================= ROLE → EVENT ================= */
@@ -90,77 +140,23 @@ async function getCompany(supabase: SupabaseClient, id: string | null) {
 function resolveRolesByEvent(event: PermitEmailEvent): string[] {
   switch (event) {
     case "stage1_submitted":
-      return ["assessor"];
-
     case "stage2_fit":
     case "stage2_not_fit":
-      return ["srm"];
-
     case "stage3_approved":
     case "stage3_rejected":
-      return ["applicant"];
-
     case "daily_endorsement":
-      return ["assessor", "srm"];
-
     case "stage4_closed":
       return ["applicant", "assessor", "srm"];
+
+    case "daily_endorsement_reminder":
+      return ["srm"];
+
+    case "closure_reminder": // ✅ NEW
+      return ["applicant"];
 
     default:
       return [];
   }
-}
-
-/* ================= GET USERS ================= */
-
-type UserSiteRoleRow = {
-  role: string;
-  user: UserRow | UserRow[] | null;
-};
-
-async function getRecipientsByRole(
-  supabase: SupabaseClient,
-  permit: PermitRow
-) {
-  const { data, error } = await supabase
-    .from("user_site_roles")
-    .select(`
-      role,
-      user:user_id (id,email,full_name,role)
-    `)
-    .eq("site.company_id", permit.company_id)
-    .eq("active", true);
-
-  if (error) {
-    console.error("getRecipientsByRole ERROR:", error);
-    return {
-      applicant: [],
-      assessor: [],
-      srm: [],
-    };
-  }
-
-  const rows = (data ?? []) as UserSiteRoleRow[];
-
-  const map: Record<string, UserRow[]> = {
-    applicant: [],
-    assessor: [],
-    srm: [],
-  };
-
-  for (const row of rows) {
-    const role = normalizeRole(row.role);
-
-    const user = Array.isArray(row.user)
-      ? row.user[0]
-      : row.user;
-
-    if (map[role] && user && user.email) {
-      map[role].push(user);
-    }
-  }
-
-  return map;
 }
 
 /* ================= GROUP EMAIL ================= */
@@ -180,7 +176,7 @@ function getGroupEmails(company: CompanyRow | null) {
     return [
       "srm@franklin.com.sg",
       "assessor@franklin.com.sg",
-      "foreman@franklin.com.sg",
+      // no applicant group
     ];
   }
 
@@ -197,7 +193,9 @@ function eventLabel(e: PermitEmailEvent) {
     stage3_approved: "Approved",
     stage3_rejected: "Rejected",
     daily_endorsement: "Daily Endorsement",
+    daily_endorsement_reminder: "Daily Endorsement Reminder",
     stage4_closed: "Completed",
+    closure_reminder: "Closure Reminder",
   }[e];
 }
 
@@ -206,20 +204,30 @@ function buildSubject(p: PermitRow, e: PermitEmailEvent) {
 }
 
 function permitUrl(id: string) {
-  return `${process.env.NEXT_PUBLIC_APP_URL}/permits/${id}`;
+  const base = process.env.NEXT_PUBLIC_APP_URL;
+
+  if (!base) {
+    throw new Error("NEXT_PUBLIC_APP_URL not set");
+  }
+
+  return `${base}/permits/${id}`;
 }
 
 /* ================= MAIN ================= */
 
 export async function notifyPermitEvent(input: NotifyPermitInput) {
   const permit = await getPermit(input.supabase, input.permitId);
-  if (!permit) return;
+
+if (!permit) {
+  console.error("❌ PERMIT NOT FOUND", input.permitId);
+  return;
+}
 
   const company = await getCompany(input.supabase, permit.company_id);
-
   if (!company) return;
 
-  const roleMap = await getRecipientsByRole(input.supabase, permit);
+  const assignedUsers = await getAssignedUsers(input.supabase, permit);
+
   const targetRoles = resolveRolesByEvent(input.event);
   const groupEmails = getGroupEmails(company);
 
@@ -241,15 +249,18 @@ export async function notifyPermitEvent(input: NotifyPermitInput) {
     if (group) {
       emails.push(group);
     } else {
-      const users = roleMap[role] || [];
-      emails.push(...users.map((u) => u.email!).filter(Boolean));
+      const users = filterByRole(assignedUsers, role);
+      emails.push(...users.map((u) => u.email!));
     }
   }
 
   emails = uniqueEmails(emails);
 
   if (!emails.length) {
-    console.log("NO RECIPIENT");
+    console.log("NO RECIPIENT", {
+      permitId: permit.id,
+      event: input.event,
+    });
     return;
   }
 
@@ -263,6 +274,7 @@ export async function notifyPermitEvent(input: NotifyPermitInput) {
       <p><b>Status:</b> ${permit.state}</p>
       <p><b>Location:</b> ${permit.location_of_work}</p>
       <p><b>Description:</b> ${permit.description}</p>
+      ${input.note ? `<p><b>Note:</b> ${input.note}</p>` : ""}
 
       <br/>
 
@@ -278,6 +290,7 @@ Permit: ${permit.serial_no}
 Status: ${permit.state}
 Location: ${permit.location_of_work}
 Description: ${permit.description}
+${input.note ? `Note: ${input.note}` : ""}
     `,
   });
 }

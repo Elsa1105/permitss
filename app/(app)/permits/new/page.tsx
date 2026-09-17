@@ -5,7 +5,7 @@ import { getCompaniesAndSites } from "@/lib/permits/queries";
 
 export default async function NewPermitPage() {
   const user = await requireUser();
-
+  console.log("DEBUG new-permit user:", user.id, user.role);
   const allowedRoles = [
     "applicant",
     "guest_applicant",
@@ -18,7 +18,7 @@ export default async function NewPermitPage() {
     redirect("/dashboard?unauthorized=1");
   }
 
-  const { companies, sites } = await getCompaniesAndSites();
+const { companies, sites } = await getCompaniesAndSites(user.id);
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -27,9 +27,7 @@ export default async function NewPermitPage() {
           New Hot Work Permit
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          Fill in the header details. After saving you can complete Stage I
-          safety checklist, upload evidence, and submit for Safety Assessor
-          endorsement.
+          Fill in the header details...
         </p>
       </div>
 
