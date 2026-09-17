@@ -84,24 +84,17 @@ async function getPermit(supabase: SupabaseClient, id: string) {
 }
 
 async function getCompany(supabase: SupabaseClient, id: string | null) {
-  if (!id) {
-    console.error("❌ company_id is null");
-    return null;
-  }
+  if (!id) return null;
 
   const { data, error } = await supabase
     .from("companies")
     .select("id, code, name")
     .eq("id", id)
-    .maybeSingle(); // 🔥 FIX
+    .maybeSingle(); // ✅ FIX (no crash)
 
   if (error) {
     console.error("getCompany ERROR:", error);
     return null;
-  }
-
-  if (!data) {
-    console.error("❌ company not found:", id);
   }
 
   return data as CompanyRow | null;
@@ -144,15 +137,6 @@ function filterByRole(users: UserRow[], role: string) {
 
 function resolveRolesByEvent(event: PermitEmailEvent): string[] {
   switch (event) {
-    case "stage1_submitted":
-    case "stage2_fit":
-    case "stage2_not_fit":
-    case "stage3_approved":
-    case "stage3_rejected":
-    case "daily_endorsement":
-    case "stage4_closed":
-      return ["applicant", "assessor", "srm"];
-
     case "daily_endorsement_reminder":
       return ["srm"];
 
@@ -160,7 +144,7 @@ function resolveRolesByEvent(event: PermitEmailEvent): string[] {
       return ["applicant"];
 
     default:
-      return [];
+      return ["applicant", "assessor", "srm"];
   }
 }
 
@@ -181,7 +165,6 @@ function getGroupEmails(company: CompanyRow | null) {
     return [
       "srm@franklin.com.sg",
       "assessor@franklin.com.sg",
-      // ❌ no applicant group
     ];
   }
 
@@ -209,13 +192,7 @@ function buildSubject(p: PermitRow, e: PermitEmailEvent) {
 }
 
 function permitUrl(id: string) {
-  const base = process.env.NEXT_PUBLIC_APP_URL;
-
-  if (!base) {
-    throw new Error("NEXT_PUBLIC_APP_URL not set");
-  }
-
-  return `${base}/permits/${id}`;
+  return `${process.env.NEXT_PUBLIC_APP_URL}/permits/${id}`;
 }
 
 /* ================= MAIN ================= */
@@ -229,23 +206,12 @@ export async function notifyPermitEvent(input: NotifyPermitInput) {
   }
 
   const company = await getCompany(input.supabase, permit.company_id);
-  if (!company) return;
 
-  let assignedUsers = await getAssignedUsers(input.supabase, permit);
-
-  // 🔥 FALLBACK kalau belum assign
-  if (assignedUsers.length === 0) {
-    console.warn("⚠️ fallback: using company users");
-
-    const { data } = await input.supabase
-      .from("users")
-      .select("id, email, full_name, role")
-      .eq("company_id", permit.company_id)
-      .eq("active", true);
-
-    assignedUsers = data || [];
+  if (!company) {
+    console.warn("⚠️ company missing, fallback to users only");
   }
 
+  const assignedUsers = await getAssignedUsers(input.supabase, permit);
   const targetRoles = resolveRolesByEvent(input.event);
   const groupEmails = getGroupEmails(company);
 
@@ -258,38 +224,42 @@ export async function notifyPermitEvent(input: NotifyPermitInput) {
   let emails: string[] = [];
 
   for (const role of targetRoles) {
-    const groupKey = roleToGroup[role];
+    const users = filterByRole(assignedUsers, role);
 
-    const group = groupEmails.find((g) =>
-      g.toLowerCase().includes(groupKey)
-    );
+    // ✅ ALWAYS include assigned users
+    emails.push(...users.map((u) => u.email!));
 
-    if (group) {
-      emails.push(group);
-    } else {
-      const users = filterByRole(assignedUsers, role);
-      emails.push(...users.map((u) => u.email!));
+    // ✅ GROUP LOGIC
+    if (company?.code === "CFE") {
+      const groupKey = roleToGroup[role];
+      const group = groupEmails.find((g) =>
+        g.toLowerCase().includes(groupKey)
+      );
+      if (group) emails.push(group);
+    }
+
+    if (company?.code === "FOI") {
+      if (role !== "applicant") {
+        const groupKey = roleToGroup[role];
+        const group = groupEmails.find((g) =>
+          g.toLowerCase().includes(groupKey)
+        );
+        if (group) emails.push(group);
+      }
     }
   }
 
-  // 🔥 FORCE applicant (biar gak pernah miss)
-  const applicantUsers = filterByRole(assignedUsers, "applicant");
-  emails.push(...applicantUsers.map((u) => u.email!));
-
   emails = uniqueEmails(emails);
 
-  console.log("EMAIL DEBUG:", {
-    permitId: permit.id,
+  console.log("📧 FINAL RECIPIENTS", {
+    permit: permit.serial_no,
     event: input.event,
-    company: company.code,
+    company: company?.code,
     emails,
   });
 
   if (!emails.length) {
-    console.log("NO RECIPIENT", {
-      permitId: permit.id,
-      event: input.event,
-    });
+    console.log("NO RECIPIENT");
     return;
   }
 
@@ -307,8 +277,7 @@ export async function notifyPermitEvent(input: NotifyPermitInput) {
 
       <br/>
 
-      <a href="${permitUrl(permit.id)}"
-         style="display:inline-block;padding:10px 16px;background:#2563eb;color:white;text-decoration:none;border-radius:6px;">
+      <a href="${permitUrl(permit.id)}">
          Open Permit
       </a>
     `,
