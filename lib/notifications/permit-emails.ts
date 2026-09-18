@@ -174,11 +174,9 @@ function filterByRole(users: UserRow[], role: Role) {
 /**
  * Per Alex's workflow table:
  *   Stage 1 (submitted), Stage 2 (fit / not fit), Stage 3 (approved /
- *   rejected) → Applicant + Assessor + SRM, every time.
+ *   rejected), stage4_closed → Applicant + Assessor + SRM, every time.
  *   daily_endorsement (manual endorsement action, NOT the 0900 cron
- *   reminder — that's daily-reminders.ts) → SRM + Assessor, since the
- *   applicant has no action to take on a daily endorsement.
- *   stage4_closed → Applicant + Assessor + SRM (closure confirmation).
+ *   reminder — that's daily-reminders.ts) → SRM + Assessor only.
  */
 function resolveRolesByEvent(event: PermitEmailEvent): Role[] {
   switch (event) {
@@ -242,41 +240,77 @@ export async function notifyPermitEvent(input: NotifyPermitInput) {
   const assignedUsers = await getAssignedUsers(input.supabase, permit);
   const targetRoles = resolveRolesByEvent(input.event);
 
-  let emails: string[] = [];
+  // Built explicitly PER ROLE first, so it's unambiguous which email
+  // belongs to which role before anything gets flattened/deduplicated.
+  // Shape: { applicant: [...emails], assessor: [...emails], srm: [...emails] }
+  const emailsByRole: Record<Role, string[]> = {
+    applicant: [],
+    assessor: [],
+    srm: [],
+  };
 
   for (const role of targetRoles) {
-    // 1) Always include whoever is actually assigned on the permit
-    //    (applicant_id / assessor_id / srm_id) for this role.
+    // 1) Whoever is actually assigned on the permit itself for this role.
     const assigned = filterByRole(assignedUsers, role);
-    emails.push(...assigned.map((u) => u.email!));
+    emailsByRole[role].push(...assigned.map((u) => u.email!));
 
-    // 2) If this role+company should behave as a group (everything
-    //    except FOI applicant/foreman), also pull in every other active
-    //    user of that role for that company — this is the "group" / "CC"
-    //    behaviour, computed live from Supabase instead of a fixed DL.
+    // 2) If this role+company behaves as a group (everything except FOI
+    //    applicant/foreman), also pull in every other active user of that
+    //    role for that company. This is the "CC everyone in that role"
+    //    behaviour, computed live from Supabase.
     if (shouldUseGroup(company?.code, role)) {
       const groupUsers = await getCompanyRoleGroup(
         input.supabase,
         permit.company_id,
         role,
       );
-      emails.push(...groupUsers.map((u) => u.email!));
+      emailsByRole[role].push(...groupUsers.map((u) => u.email!));
     }
+
+    // Dedupe within each role so the log/print-out per role is clean.
+    emailsByRole[role] = uniqueEmails(emailsByRole[role]);
   }
 
-  emails = uniqueEmails(emails);
-
-  console.log("📧 FINAL RECIPIENTS", {
+  // Clear, role-by-role breakdown — exactly "role apa -> emailnya siapa aja".
+  console.log("📧 RECIPIENTS BY ROLE", {
     permit: permit.serial_no,
     event: input.event,
     company: company?.code,
-    emails,
+    applicant: emailsByRole.applicant,
+    assessor: emailsByRole.assessor,
+    srm: emailsByRole.srm,
   });
+
+  // Flatten + dedupe across roles only at the very end, for the actual send.
+  const emails = uniqueEmails([
+    ...emailsByRole.applicant,
+    ...emailsByRole.assessor,
+    ...emailsByRole.srm,
+  ]);
 
   if (!emails.length) {
     console.log("NO RECIPIENT");
     return;
   }
+
+  // Human-readable "role: email, email" breakdown, included in the email
+  // body itself so anyone opening the message can see who else is on it
+  // and in what role — not just a flat "to" list.
+  const roleBreakdownHtml = (Object.keys(emailsByRole) as Role[])
+    .filter((role) => emailsByRole[role].length > 0)
+    .map(
+      (role) => `
+        <p style="margin: 4px 0;">
+          <b style="text-transform: capitalize;">${role}:</b>
+          ${emailsByRole[role].join(", ")}
+        </p>`,
+    )
+    .join("");
+
+  const roleBreakdownText = (Object.keys(emailsByRole) as Role[])
+    .filter((role) => emailsByRole[role].length > 0)
+    .map((role) => `${role}: ${emailsByRole[role].join(", ")}`)
+    .join("\n");
 
   return sendEmailNotification({
     to: emails,
@@ -289,6 +323,10 @@ export async function notifyPermitEvent(input: NotifyPermitInput) {
       <p><b>Location:</b> ${permit.location_of_work}</p>
       <p><b>Description:</b> ${permit.description}</p>
       ${input.note ? `<p><b>Note:</b> ${input.note}</p>` : ""}
+
+      <hr style="margin: 16px 0; border: none; border-top: 1px solid #e2e8f0;" />
+      <p style="font-size: 13px; color: #475569; margin: 0 0 8px 0;"><b>Recipients by role:</b></p>
+      ${roleBreakdownHtml}
 
       <br/>
 
@@ -304,6 +342,9 @@ Status: ${permit.state}
 Location: ${permit.location_of_work}
 Description: ${permit.description}
 ${input.note ? `Note: ${input.note}` : ""}
+
+Recipients by role:
+${roleBreakdownText}
     `,
   });
 }
