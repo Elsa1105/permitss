@@ -4,6 +4,10 @@ import { sendEmailNotification } from "./email";
 
 /* ================= TYPES ================= */
 
+// NOTE: daily_endorsement_reminder / closure_reminder are handled by
+// lib/notifications/daily-reminders.ts (via the /api/cron/* routes),
+// NOT by this file. They were removed from this union because nothing
+// ever called notifyPermitEvent() with them — that was dead code.
 type PermitEmailEvent =
   | "stage1_submitted"
   | "stage2_fit"
@@ -11,9 +15,7 @@ type PermitEmailEvent =
   | "stage3_approved"
   | "stage3_rejected"
   | "daily_endorsement"
-  | "daily_endorsement_reminder"
-  | "stage4_closed"
-  | "closure_reminder";
+  | "stage4_closed";
 
 type NotifyPermitInput = {
   supabase: SupabaseClient;
@@ -50,9 +52,11 @@ type CompanyRow = {
   name: string;
 };
 
+type Role = "applicant" | "assessor" | "srm";
+
 /* ================= UTIL ================= */
 
-function normalizeRole(role?: string | null) {
+function normalizeRole(role?: string | null): Role | "" {
   const r = role?.toLowerCase() || "";
 
   if (r.includes("applicant") || r.includes("foreman")) return "applicant";
@@ -90,7 +94,7 @@ async function getCompany(supabase: SupabaseClient, id: string | null) {
     .from("companies")
     .select("id, code, name")
     .eq("id", id)
-    .maybeSingle(); // ✅ FIX (no crash)
+    .maybeSingle();
 
   if (error) {
     console.error("getCompany ERROR:", error);
@@ -100,17 +104,16 @@ async function getCompany(supabase: SupabaseClient, id: string | null) {
   return data as CompanyRow | null;
 }
 
-/* ================= USERS ================= */
-
-async function getAssignedUsers(
-  supabase: SupabaseClient,
-  permit: PermitRow
-) {
-  const ids = [
-    permit.applicant_id,
-    permit.assessor_id,
-    permit.srm_id,
-  ].filter(Boolean);
+/**
+ * Users directly assigned on the permit row itself (applicant_id /
+ * assessor_id / srm_id). These are always included on top of any group
+ * email, per Alex's spec: "assigned assessor" / "assigned SRM" must be
+ * notified even if a group address also gets the email.
+ */
+async function getAssignedUsers(supabase: SupabaseClient, permit: PermitRow) {
+  const ids = [permit.applicant_id, permit.assessor_id, permit.srm_id].filter(
+    Boolean,
+  ) as string[];
 
   if (ids.length === 0) return [];
 
@@ -127,51 +130,84 @@ async function getAssignedUsers(
   return data as UserRow[];
 }
 
-function filterByRole(users: UserRow[], role: string) {
-  return users.filter(
-    (u) => normalizeRole(u.role) === role && u.email
+/**
+ * Fallback: every active user for this company + role, queried directly
+ * off users.company_id (confirmed present on the real users table — no
+ * need to join through user_site_roles/sites for this). Used when the
+ * permit doesn't yet have someone assigned to a role (e.g. no assessor_id
+ * yet at stage1_submitted) or when a role should notify everyone in that
+ * role for the company, not just the one assigned person.
+ */
+async function getUsersByCompanyAndRole(
+  supabase: SupabaseClient,
+  companyId: string | null,
+  role: Role,
+) {
+  if (!companyId) return [];
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, email, full_name, role")
+    .eq("company_id", companyId)
+    .eq("active", true);
+
+  if (error) {
+    console.error("getUsersByCompanyAndRole ERROR:", error);
+    return [];
+  }
+
+  return ((data ?? []) as UserRow[]).filter(
+    (u) => normalizeRole(u.role) === role && u.email,
   );
+}
+
+function filterByRole(users: UserRow[], role: Role) {
+  return users.filter((u) => normalizeRole(u.role) === role && u.email);
 }
 
 /* ================= ROLE → EVENT ================= */
 
-function resolveRolesByEvent(event: PermitEmailEvent): string[] {
+function resolveRolesByEvent(event: PermitEmailEvent): Role[] {
+  // Per Alex's workflow table (Image 1): every stage 1-3 and daily
+  // endorsement notifies Applicant + Assessor + SRM together.
   switch (event) {
-    case "daily_endorsement_reminder":
-      return ["srm"];
-
-    case "closure_reminder":
-      return ["applicant"];
-
     default:
       return ["applicant", "assessor", "srm"];
   }
 }
 
-/* ================= GROUP EMAIL ================= */
+/* ================= GROUP EMAIL (by role + company) ================= */
 
-function getGroupEmails(company: CompanyRow | null) {
-  if (!company) return [];
+/**
+ * TODO: replace every address below with the REAL distribution-list
+ * address from Outlook (Group Settings → the actual SMTP address, not
+ * the display name) — e.g. "ePermit SRM CFE", "ePermit Assessor CFE",
+ * "ePermit Foreman CFE" from the screenshot Alex sent, and their FOI
+ * equivalents if those groups exist too. Until then these are
+ * placeholders and notifyPermitEvent() will simply skip a group that
+ * isn't found here (real assigned/individual users still get emailed
+ * as a fallback, so nothing silently fails).
+ */
+const GROUP_EMAILS: Record<string, Partial<Record<Role, string>>> = {
+  FOI: {
+    srm: "srm@franklin.com.sg", // TODO: replace with real FOI SRM DL address
+    assessor: "assessor@franklin.com.sg", // TODO: replace with real FOI Assessor DL address
+    // FOI applicants are notified individually per Alex's spec (Image 2),
+    // not via a group — intentionally no "applicant" entry here.
+  },
+  CFE: {
+    srm: "srm@cfe.com.sg", // TODO: replace with real "ePermit SRM CFE" DL address
+    assessor: "assessor@cfe.com.sg", // TODO: replace with real "ePermit Assessor CFE" DL address
+    applicant: "foreman@cfe.com.sg", // TODO: replace with real "ePermit Foreman CFE" DL address
+  },
+};
 
-  if (company.code === "CFE") {
-    return [
-      "srm@cfe.com.sg",
-      "assessor@cfe.com.sg",
-      "foreman@cfe.com.sg",
-    ];
-  }
-
-  if (company.code === "FOI") {
-    return [
-      "srm@franklin.com.sg",
-      "assessor@franklin.com.sg",
-    ];
-  }
-
-  return [];
+function getGroupEmail(company: CompanyRow | null, role: Role): string | null {
+  if (!company) return null;
+  return GROUP_EMAILS[company.code]?.[role] ?? null;
 }
 
-/* ================= EMAIL ================= */
+/* ================= EMAIL CONTENT ================= */
 
 function eventLabel(e: PermitEmailEvent) {
   return {
@@ -181,9 +217,7 @@ function eventLabel(e: PermitEmailEvent) {
     stage3_approved: "Approved",
     stage3_rejected: "Rejected",
     daily_endorsement: "Daily Endorsement",
-    daily_endorsement_reminder: "Daily Endorsement Reminder",
     stage4_closed: "Completed",
-    closure_reminder: "Closure Reminder",
   }[e];
 }
 
@@ -208,44 +242,35 @@ export async function notifyPermitEvent(input: NotifyPermitInput) {
   const company = await getCompany(input.supabase, permit.company_id);
 
   if (!company) {
-    console.warn("⚠️ company missing, fallback to users only");
+    console.warn("⚠️ company missing on permit, notifications will use assigned/individual users only");
   }
 
   const assignedUsers = await getAssignedUsers(input.supabase, permit);
   const targetRoles = resolveRolesByEvent(input.event);
-  const groupEmails = getGroupEmails(company);
-
-  const roleToGroup: Record<string, string> = {
-    applicant: "foreman",
-    assessor: "assessor",
-    srm: "srm",
-  };
 
   let emails: string[] = [];
 
   for (const role of targetRoles) {
-    const users = filterByRole(assignedUsers, role);
+    // 1) Always include whoever is actually assigned on the permit
+    //    (applicant_id / assessor_id / srm_id), matching that role.
+    const assigned = filterByRole(assignedUsers, role);
+    emails.push(...assigned.map((u) => u.email!));
 
-    // ✅ ALWAYS include assigned users
-    emails.push(...users.map((u) => u.email!));
+    // 2) Also include the company+role group/DL address, if we have one.
+    const group = getGroupEmail(company, role);
+    if (group) emails.push(group);
 
-    // ✅ GROUP LOGIC
-    if (company?.code === "CFE") {
-      const groupKey = roleToGroup[role];
-      const group = groupEmails.find((g) =>
-        g.toLowerCase().includes(groupKey)
+    // 3) If nobody is assigned to this role yet AND there's no group
+    //    address configured for it, fall back to every active user of
+    //    that role for this company — so a permit never goes silently
+    //    unnotified just because assessor_id/srm_id hasn't been set yet.
+    if (assigned.length === 0 && !group) {
+      const fallbackUsers = await getUsersByCompanyAndRole(
+        input.supabase,
+        permit.company_id,
+        role,
       );
-      if (group) emails.push(group);
-    }
-
-    if (company?.code === "FOI") {
-      if (role !== "applicant") {
-        const groupKey = roleToGroup[role];
-        const group = groupEmails.find((g) =>
-          g.toLowerCase().includes(groupKey)
-        );
-        if (group) emails.push(group);
-      }
+      emails.push(...fallbackUsers.map((u) => u.email!));
     }
   }
 
