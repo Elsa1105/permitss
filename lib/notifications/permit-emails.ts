@@ -133,13 +133,14 @@ async function getAssignedUsers(supabase: SupabaseClient, permit: PermitRow) {
  * "Group" email — computed directly from Supabase, not from an Outlook
  * distribution list. This is every ACTIVE user in `users` whose
  * company_id matches the permit's company AND whose role matches the
- * target role. E.g. for a CFE permit, role "srm" → every active CFE user
- * with role = srm (Stephen Wong, Samuel Tan, Alan Ng, per the real data).
+ * target role.
  *
  * This is intentionally the ENTIRE role+company pool, not just the one
  * person assigned to the permit — that's what makes it behave like a
  * "group" (everyone in that role for that company gets notified),
- * matching what Alex asked for without needing a real DL address.
+ * matching Alex's spec (srm@franklin.com.sg / assessor@franklin.com.sg /
+ * srm@cfe.com.sg / assessor@cfe.com.sg / foreman@cfe.com.sg) without
+ * needing a real DL address.
  */
 async function getCompanyRoleGroup(
   supabase: SupabaseClient,
@@ -170,10 +171,19 @@ function filterByRole(users: UserRow[], role: Role) {
 
 /* ================= ROLE → EVENT ================= */
 
+/**
+ * Per Alex's workflow table:
+ *   Stage 1 (submitted), Stage 2 (fit / not fit), Stage 3 (approved /
+ *   rejected) → Applicant + Assessor + SRM, every time.
+ *   daily_endorsement (manual endorsement action, NOT the 0900 cron
+ *   reminder — that's daily-reminders.ts) → SRM + Assessor, since the
+ *   applicant has no action to take on a daily endorsement.
+ *   stage4_closed → Applicant + Assessor + SRM (closure confirmation).
+ */
 function resolveRolesByEvent(event: PermitEmailEvent): Role[] {
-  // Per Alex's workflow table: every stage 1-3 and daily endorsement
-  // notifies Applicant + Assessor + SRM together.
   switch (event) {
+    case "daily_endorsement":
+      return ["assessor", "srm"];
     default:
       return ["applicant", "assessor", "srm"];
   }
@@ -242,8 +252,8 @@ export async function notifyPermitEvent(input: NotifyPermitInput) {
 
     // 2) If this role+company should behave as a group (everything
     //    except FOI applicant/foreman), also pull in every other active
-    //    user of that role for that company — this is the "group"
-    //    behaviour, computed live from Supabase instead of a DL address.
+    //    user of that role for that company — this is the "group" / "CC"
+    //    behaviour, computed live from Supabase instead of a fixed DL.
     if (shouldUseGroup(company?.code, role)) {
       const groupUsers = await getCompanyRoleGroup(
         input.supabase,
