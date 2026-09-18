@@ -6,8 +6,7 @@ import { sendEmailNotification } from "./email";
 
 // NOTE: daily_endorsement_reminder / closure_reminder are handled by
 // lib/notifications/daily-reminders.ts (via the /api/cron/* routes),
-// NOT by this file. They were removed from this union because nothing
-// ever called notifyPermitEvent() with them — that was dead code.
+// NOT by this file.
 type PermitEmailEvent =
   | "stage1_submitted"
   | "stage2_fit"
@@ -106,9 +105,9 @@ async function getCompany(supabase: SupabaseClient, id: string | null) {
 
 /**
  * Users directly assigned on the permit row itself (applicant_id /
- * assessor_id / srm_id). These are always included on top of any group
- * email, per Alex's spec: "assigned assessor" / "assigned SRM" must be
- * notified even if a group address also gets the email.
+ * assessor_id / srm_id). These are always included — the specific person
+ * tied to this permit must always be notified, regardless of the "group"
+ * logic below.
  */
 async function getAssignedUsers(supabase: SupabaseClient, permit: PermitRow) {
   const ids = [permit.applicant_id, permit.assessor_id, permit.srm_id].filter(
@@ -131,14 +130,18 @@ async function getAssignedUsers(supabase: SupabaseClient, permit: PermitRow) {
 }
 
 /**
- * Fallback: every active user for this company + role, queried directly
- * off users.company_id (confirmed present on the real users table — no
- * need to join through user_site_roles/sites for this). Used when the
- * permit doesn't yet have someone assigned to a role (e.g. no assessor_id
- * yet at stage1_submitted) or when a role should notify everyone in that
- * role for the company, not just the one assigned person.
+ * "Group" email — computed directly from Supabase, not from an Outlook
+ * distribution list. This is every ACTIVE user in `users` whose
+ * company_id matches the permit's company AND whose role matches the
+ * target role. E.g. for a CFE permit, role "srm" → every active CFE user
+ * with role = srm (Stephen Wong, Samuel Tan, Alan Ng, per the real data).
+ *
+ * This is intentionally the ENTIRE role+company pool, not just the one
+ * person assigned to the permit — that's what makes it behave like a
+ * "group" (everyone in that role for that company gets notified),
+ * matching what Alex asked for without needing a real DL address.
  */
-async function getUsersByCompanyAndRole(
+async function getCompanyRoleGroup(
   supabase: SupabaseClient,
   companyId: string | null,
   role: Role,
@@ -152,7 +155,7 @@ async function getUsersByCompanyAndRole(
     .eq("active", true);
 
   if (error) {
-    console.error("getUsersByCompanyAndRole ERROR:", error);
+    console.error("getCompanyRoleGroup ERROR:", error);
     return [];
   }
 
@@ -168,43 +171,24 @@ function filterByRole(users: UserRow[], role: Role) {
 /* ================= ROLE → EVENT ================= */
 
 function resolveRolesByEvent(event: PermitEmailEvent): Role[] {
-  // Per Alex's workflow table (Image 1): every stage 1-3 and daily
-  // endorsement notifies Applicant + Assessor + SRM together.
+  // Per Alex's workflow table: every stage 1-3 and daily endorsement
+  // notifies Applicant + Assessor + SRM together.
   switch (event) {
     default:
       return ["applicant", "assessor", "srm"];
   }
 }
 
-/* ================= GROUP EMAIL (by role + company) ================= */
-
 /**
- * TODO: replace every address below with the REAL distribution-list
- * address from Outlook (Group Settings → the actual SMTP address, not
- * the display name) — e.g. "ePermit SRM CFE", "ePermit Assessor CFE",
- * "ePermit Foreman CFE" from the screenshot Alex sent, and their FOI
- * equivalents if those groups exist too. Until then these are
- * placeholders and notifyPermitEvent() will simply skip a group that
- * isn't found here (real assigned/individual users still get emailed
- * as a fallback, so nothing silently fails).
+ * Per Alex's spec (Image 2):
+ *   - FOI applicant/foreman → INDIVIDUAL only, never the company-wide group
+ *     ("Individual addressing supports permit-owner traceability").
+ *   - Every other combination (FOI srm/assessor, CFE all three roles) →
+ *     group behaviour (assigned user + everyone else in that role/company).
  */
-const GROUP_EMAILS: Record<string, Partial<Record<Role, string>>> = {
-  FOI: {
-    srm: "srm@franklin.com.sg", // TODO: replace with real FOI SRM DL address
-    assessor: "assessor@franklin.com.sg", // TODO: replace with real FOI Assessor DL address
-    // FOI applicants are notified individually per Alex's spec (Image 2),
-    // not via a group — intentionally no "applicant" entry here.
-  },
-  CFE: {
-    srm: "srm@cfe.com.sg", // TODO: replace with real "ePermit SRM CFE" DL address
-    assessor: "assessor@cfe.com.sg", // TODO: replace with real "ePermit Assessor CFE" DL address
-    applicant: "foreman@cfe.com.sg", // TODO: replace with real "ePermit Foreman CFE" DL address
-  },
-};
-
-function getGroupEmail(company: CompanyRow | null, role: Role): string | null {
-  if (!company) return null;
-  return GROUP_EMAILS[company.code]?.[role] ?? null;
+function shouldUseGroup(companyCode: string | undefined, role: Role) {
+  if (companyCode === "FOI" && role === "applicant") return false;
+  return true;
 }
 
 /* ================= EMAIL CONTENT ================= */
@@ -242,7 +226,7 @@ export async function notifyPermitEvent(input: NotifyPermitInput) {
   const company = await getCompany(input.supabase, permit.company_id);
 
   if (!company) {
-    console.warn("⚠️ company missing on permit, notifications will use assigned/individual users only");
+    console.warn("⚠️ company missing on permit, notifications will use assigned users only");
   }
 
   const assignedUsers = await getAssignedUsers(input.supabase, permit);
@@ -252,25 +236,21 @@ export async function notifyPermitEvent(input: NotifyPermitInput) {
 
   for (const role of targetRoles) {
     // 1) Always include whoever is actually assigned on the permit
-    //    (applicant_id / assessor_id / srm_id), matching that role.
+    //    (applicant_id / assessor_id / srm_id) for this role.
     const assigned = filterByRole(assignedUsers, role);
     emails.push(...assigned.map((u) => u.email!));
 
-    // 2) Also include the company+role group/DL address, if we have one.
-    const group = getGroupEmail(company, role);
-    if (group) emails.push(group);
-
-    // 3) If nobody is assigned to this role yet AND there's no group
-    //    address configured for it, fall back to every active user of
-    //    that role for this company — so a permit never goes silently
-    //    unnotified just because assessor_id/srm_id hasn't been set yet.
-    if (assigned.length === 0 && !group) {
-      const fallbackUsers = await getUsersByCompanyAndRole(
+    // 2) If this role+company should behave as a group (everything
+    //    except FOI applicant/foreman), also pull in every other active
+    //    user of that role for that company — this is the "group"
+    //    behaviour, computed live from Supabase instead of a DL address.
+    if (shouldUseGroup(company?.code, role)) {
+      const groupUsers = await getCompanyRoleGroup(
         input.supabase,
         permit.company_id,
         role,
       );
-      emails.push(...fallbackUsers.map((u) => u.email!));
+      emails.push(...groupUsers.map((u) => u.email!));
     }
   }
 
