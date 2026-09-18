@@ -18,7 +18,7 @@ export default async function NewPermitPage() {
     redirect("/dashboard?unauthorized=1");
   }
 
-const { companies, sites } = await getCompaniesAndSites(user.id);
+const { companies, sites } = await getCompaniesAndSites(user.id, user.role);
 
   return (
     <div className="max-w-3xl mx-auto">

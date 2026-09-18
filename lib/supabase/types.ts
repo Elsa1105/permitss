@@ -63,6 +63,7 @@ export interface UserRow {
   email: string;
   full_name: string;
   department: string | null;
+  company_id: string | null;
   role: UserRole;
   qualified_for: string[];
   active: boolean;

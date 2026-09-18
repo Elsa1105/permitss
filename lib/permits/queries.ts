@@ -176,8 +176,33 @@ export async function getPermitDocuments(
 }
 
 
-export async function getCompaniesAndSites(userId: string) {
+export async function getCompaniesAndSites(userId: string, userRole?: string) {
   const supabase = createServiceRoleSupabase();
+
+  // Admins may access both entities where necessary (per Alex's spec:
+  // "Selected Admin and Assessor roles may access both entities where
+  // necessary") — so admins always see every active company/site,
+  // regardless of what's in their own user_site_roles rows.
+  if (userRole === "admin") {
+    const { data: allCompanies, error: companiesError } = await supabase
+      .from("companies")
+      .select("*")
+      .eq("active", true);
+
+    if (companiesError) throw companiesError;
+
+    const { data: allSites, error: sitesError } = await supabase
+      .from("sites")
+      .select("*")
+      .eq("active", true);
+
+    if (sitesError) throw sitesError;
+
+    return {
+      companies: allCompanies ?? [],
+      sites: allSites ?? [],
+    };
+  }
 
   const { data: roles, error } = await supabase
     .from("user_site_roles")
