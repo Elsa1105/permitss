@@ -79,13 +79,22 @@ export async function POST(request: Request) {
 
   const { data: existingProfile } = await admin
     .from("users")
-    .select("id")
+    .select("id, active")
     .eq("email", payload.email)
     .maybeSingle();
 
   if (existingProfile) {
+    // Don't just say "already exists" — that's what led to the confusion
+    // where an admin couldn't tell why the same email couldn't be reused
+    // even though the person supposedly had no working account. Point at
+    // the actual existing row and at the fix (Reset Password on that row,
+    // which now also recreates a missing login) instead of a dead end.
     return NextResponse.json(
-      { error: "User with this email already exists" },
+      {
+        error: `A user profile with this email already exists (status: ${
+          existingProfile.active ? "active" : "inactive"
+        }). Use "Reset Password" on that user in the table below instead of creating a new one — it will also fix a broken/missing login.`,
+      },
       { status: 400 },
     );
   }
@@ -120,6 +129,9 @@ export async function POST(request: Request) {
         role: payload.role,
         qualified_for: payload.qualified_for,
         active: payload.active,
+        // Admin chose this password on the user's behalf — make them set
+        // their own before they can use the app.
+        must_change_password: true,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "id" },

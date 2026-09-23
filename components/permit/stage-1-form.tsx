@@ -94,6 +94,7 @@ export function Stage1Form({ permitId, currentUser }: Props) {
               value={new Date().toLocaleTimeString("en-SG", {
                 hour: "2-digit",
                 minute: "2-digit",
+                timeZone: "Asia/Singapore",
               })}
             />
           </div>

@@ -19,11 +19,18 @@ export async function getCurrentUser(): Promise<UserRow | null> {
     .maybeSingle();
 
   if (!row) {
+    // This auth account has no matching `users` profile row. Previously
+    // this silently returned a fake, active "applicant" profile — meaning
+    // anyone whose profile row went missing (e.g. deleted while the Auth
+    // account stayed behind) would still get in with default access
+    // instead of being blocked. Treat it as inactive instead, same as a
+    // deactivated account, so requireUser()/requireRole() send them to
+    // /login?inactive=1 rather than granting silent default access.
     return {
       id: user.id,
       email: user.email ?? "",
       role: "applicant",
-      active: true,
+      active: false,
     } as UserRow;
   }
 

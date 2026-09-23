@@ -66,6 +66,11 @@ type PermitExtra = PermitWithJoins & {
   other_hazard_text?: string | null;
 };
 
+// Permits and signatures are all Singapore-based, so every timestamp in
+// the PDF must be rendered in SGT — otherwise the server's UTC runtime
+// (Vercel) makes every date/time in the document up to 8 hours off.
+const SG_TIME_ZONE = "Asia/Singapore";
+
 function fmtDate(s: string | null | undefined): string {
   if (!s) return "—";
 
@@ -75,6 +80,7 @@ function fmtDate(s: string | null | undefined): string {
     year: "numeric",
     month: "short",
     day: "2-digit",
+    timeZone: SG_TIME_ZONE,
   });
 }
 
@@ -84,6 +90,7 @@ function fmtTime(s: string | null | undefined): string {
   return new Date(s).toLocaleTimeString("en-SG", {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: SG_TIME_ZONE,
   });
 }
 
@@ -203,7 +210,7 @@ export async function generatePermitPdf(bundle: PdfBundle): Promise<Uint8Array> 
 
   const rightPanelX = A4.w - MARGIN - RIGHT_PANEL_W;
 
-  drawDayPanel(
+  const dayPanelBottomY = drawDayPanel(
     ctx,
     bundle.endorsements,
     rightPanelX,
@@ -212,12 +219,18 @@ export async function generatePermitPdf(bundle: PdfBundle): Promise<Uint8Array> 
   );
 
   if (bundle.publicPermitUrl) {
+    // Position the QR/"LIVE PERMIT" block right after wherever the day
+    // panel actually ended, instead of a hardcoded "13 rows * 25pt"
+    // guess. The real row height varies (rows with a rejection/revoke
+    // reason are taller), so a fixed offset drifts and the QR block's
+    // opaque white background ends up painted on top of the later day
+    // rows (Day 12–14, sometimes Day 11) instead of below them.
     await drawQrCode(
       doc,
       ctx,
       bundle.publicPermitUrl,
       rightPanelX,
-      headerStartY + 28 + 13 * 25 + 8,
+      dayPanelBottomY + 8,
       RIGHT_PANEL_W,
     );
   }
@@ -659,7 +672,7 @@ function drawDayPanel(
   x: number,
   yStart: number,
   w: number,
-) {
+): number {
   const titleH = 28;
 
   box(ctx.page, x, yStart, w, titleH, COLOR.band);
@@ -732,6 +745,8 @@ function drawDayPanel(
 
     y += thisCellH;
   }
+
+  return y;
 }
 
 function drawStage1(ctx: DrawCtx, b: PdfBundle, w: number) {

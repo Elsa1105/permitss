@@ -172,6 +172,10 @@ export async function POST(request: Request) {
             role: row.role,
             qualified_for: row.qualified_for,
             active: row.active,
+            // Every bulk-imported user starts on the same shared
+            // DEFAULT_PASSWORD below — force them to set their own on
+            // first login instead of leaving everyone on it indefinitely.
+            must_change_password: true,
           });
 
           if (upsert.error) {

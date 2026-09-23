@@ -7,6 +7,7 @@ import {
   ClipboardList,
   FileCheck,
   FilePlus,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -178,6 +179,13 @@ function SidebarContent({
           <div className="text-xs text-slate-500 truncate">{user.email}</div>
           <div className="text-xs text-slate-400 mt-0.5 capitalize">{user.role}</div>
         </div>
+        <Link
+          href="/settings/change-password"
+          onClick={onNavigate}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-100"
+        >
+          <KeyRound className="h-4 w-4" /> Change Password
+        </Link>
         <button
           type="button"
           onClick={onSignOut}

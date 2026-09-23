@@ -87,16 +87,6 @@ export function Stage2Form({ permitId }: { permitId: string }) {
     }));
   }
 
-  function buildNaSummary() {
-    const naLabels = CHECKLIST_ITEMS.filter(
-      (item) => checklist[item.key] === "na",
-    ).map((item) => item.label);
-
-    if (!naLabels.length) return "";
-
-    return `N/A items: ${naLabels.join(", ")}.`;
-  }
-
   function checklistForCurrentBackend() {
     return CHECKLIST_ITEMS.reduce(
       (acc, item) => {
@@ -162,13 +152,6 @@ export function Stage2Form({ permitId }: { permitId: string }) {
       return;
     }
 
-    const naSummary = buildNaSummary();
-
-    const remarksWithNa =
-      naSummary && !cleanedRemarks.includes(naSummary)
-        ? `${cleanedRemarks}${cleanedRemarks ? "\n\n" : ""}${naSummary}`
-        : cleanedRemarks;
-
     setError(null);
     setSubmitting(true);
 
@@ -178,7 +161,12 @@ export function Stage2Form({ permitId }: { permitId: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fit,
-          remarks: remarksWithNa,
+          // Just the assessor's own remarks — not auto-appended with an
+          // "N/A items: ..." restatement. That summary duplicated
+          // information already shown per line item in the checklist
+          // itself (both on screen and in the PDF's Stage II grid), which
+          // is exactly what assessors flagged as redundant.
+          remarks: cleanedRemarks,
           checklist: checklistForCurrentBackend(),
           corrective_action: fit === false ? correctiveAction.trim() : null,
           rectification_date: fit === false ? rectificationDate : null,

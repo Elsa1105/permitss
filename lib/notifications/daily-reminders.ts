@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmailNotification } from "./email";
 import { currentPermitDay, maxEndorsementDay } from "@/lib/permits/day";
+import { todayISO } from "@/lib/utils";
 import type { PermitRow } from "@/lib/supabase/types";
 
 /**
@@ -279,7 +280,9 @@ export async function sendSrmEndorsementReminders(supabase: SupabaseClient) {
  * since only the Applicant can close a permit per the client's spec.
  */
 export async function sendApplicantClosureReminders(supabase: SupabaseClient) {
-  const today = new Date().toISOString().slice(0, 10);
+  // SGT calendar date, not the cron server's UTC date — otherwise this
+  // job flags/skips permits up to a day early or late around midnight SGT.
+  const today = todayISO();
 
   const { data: permits, error } = await supabase
     .from("permits")

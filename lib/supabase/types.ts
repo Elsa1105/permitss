@@ -49,6 +49,8 @@ export type AuditAction =
   | "user_updated"
   | "user_activated"
   | "user_deactivated"
+  | "user_password_reset"
+  | "user_login_recreated"
   | "user_site_role_added"
   | "user_site_role_updated"
   | "user_site_role_removed";
@@ -67,6 +69,15 @@ export interface UserRow {
   role: UserRole;
   qualified_for: string[];
   active: boolean;
+  // True whenever the current password was set BY SOMEONE ELSE (admin
+  // manual creation, CSV bulk import with the shared default password, or
+  // an admin password reset/login-recreate) rather than chosen by the
+  // user themselves. Forces a redirect to /settings/change-password until
+  // they set their own password — this is what replaces the old
+  // self-service Change Password page that was removed, which is what
+  // UAT flagged ("password change option not available, all password
+  // same").
+  must_change_password: boolean;
   created_at: string;
   updated_at: string;
 }

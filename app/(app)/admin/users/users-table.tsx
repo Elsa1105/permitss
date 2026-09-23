@@ -85,7 +85,11 @@ export function UsersTable({
         return;
       }
 
-      toast.success(`Password updated for ${resetTarget.full_name}`);
+      toast.success(
+        body.recreated
+          ? `Login recreated for ${resetTarget.full_name} — their account had no working sign-in; they can log in with this new password now.`
+          : `Password updated for ${resetTarget.full_name}`,
+      );
       closeResetDialog();
     } finally {
       setResetBusy(false);
@@ -378,6 +382,13 @@ export function UsersTable({
                   <Badge tone={user.active ? "ok" : "neutral"}>
                     {user.active ? "Active" : "Inactive"}
                   </Badge>
+                  {user.must_change_password ? (
+                    <div className="mt-1">
+                      <Badge tone="warn" className="text-[10px]">
+                        Must change password
+                      </Badge>
+                    </div>
+                  ) : null}
                 </td>
 
                 <td className="text-right">
@@ -432,7 +443,7 @@ export function UsersTable({
         title="Reset Password"
         description={
           resetTarget
-            ? `Set a new password for ${resetTarget.full_name} (${resetTarget.email}).`
+            ? `Set a new password for ${resetTarget.full_name} (${resetTarget.email}). If their login was somehow removed, this recreates it automatically.`
             : undefined
         }
         size="sm"
