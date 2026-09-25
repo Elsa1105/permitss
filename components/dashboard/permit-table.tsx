@@ -379,14 +379,28 @@ export function PermitTable({
           <table
             className="
               w-full
-              table-auto
+              table-fixed
               text-sm
             "
           >
             {/*
-            Auto layout: each column widens to fit
-            its own content, nothing gets clipped.
+            Fixed layout + colgroup below: every column gets a set
+            share of the table's width, so the table always fits the
+            screen instead of growing wider than it (that growth -
+            driven by whitespace-nowrap on Company/Site, Location and
+            Dates - is what pushed Status off the right edge). Long
+            content now wraps onto extra lines within its column
+            instead of forcing the table wider.
             */}
+
+            <colgroup>
+              <col className="w-[13%]" />
+              <col className="w-[17%]" />
+              <col className="w-[18%]" />
+              <col className="w-[15%]" />
+              <col className="w-[17%]" />
+              <col className="w-[20%]" />
+            </colgroup>
 
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600">
               <tr>
@@ -395,7 +409,6 @@ export function PermitTable({
                   sortKey="serial_no"
                   sort={sort}
                   onSort={toggleSort}
-                  className="w-px px-3"
                 />
 
                 <SortableHeader
@@ -453,20 +466,21 @@ export function PermitTable({
                     }}
                   >
                     {/* SERIAL */}
+                    {/* Shown in full now (no fixed-width truncation) -
+                        the distinguishing part of a serial is at the
+                        end (e.g. "...-000020"), so cutting it off with
+                        "..." made every row look identical. */}
 
-                    <td className="w-px border-t border-slate-100 px-3 py-3 align-middle">
-                      <span
-                        className="block max-w-[120px] truncate text-xs text-slate-500"
-                        title={p.serial_no}
-                      >
+                    <td className="border-t border-slate-100 px-3 py-3 align-top">
+                      <span className="block break-words text-xs text-slate-500">
                         {p.serial_no}
                       </span>
                     </td>
 
                     {/* JOB TYPE */}
 
-                    <td className="border-t border-slate-100 px-4 py-3 align-middle">
-                      <span className="text-sm text-slate-700">
+                    <td className="border-t border-slate-100 px-4 py-3 align-top">
+                      <span className="block break-words text-sm text-slate-700">
                         {p.job_type ||
                           "—"}
                       </span>
@@ -474,13 +488,8 @@ export function PermitTable({
 
                     {/* COMPANY / SITE */}
 
-                    <td className="border-t border-slate-100 px-4 py-3 align-middle">
-                      <span
-                        className="whitespace-nowrap text-sm text-slate-700"
-                        title={
-                          companySite
-                        }
-                      >
+                    <td className="border-t border-slate-100 px-4 py-3 align-top">
+                      <span className="block break-words text-sm text-slate-700">
                         {companySite ||
                           "—"}
                       </span>
@@ -488,14 +497,8 @@ export function PermitTable({
 
                     {/* LOCATION */}
 
-                    <td className="border-t border-slate-100 px-4 py-3 align-middle">
-                      <span
-                        className="whitespace-nowrap text-sm text-slate-700"
-                        title={
-                          p.location_of_work ||
-                          ""
-                        }
-                      >
+                    <td className="border-t border-slate-100 px-4 py-3 align-top">
+                      <span className="block break-words text-sm text-slate-700">
                         {p.location_of_work ||
                           "—"}
                       </span>
@@ -503,8 +506,8 @@ export function PermitTable({
 
                     {/* DATES */}
 
-                    <td className="border-t border-slate-100 px-4 py-3 align-middle">
-                      <span className="whitespace-nowrap text-sm text-slate-700">
+                    <td className="border-t border-slate-100 px-4 py-3 align-top">
+                      <span className="block break-words text-sm text-slate-700">
                         {formatDate(
                           p.date_commencement,
                         )}
@@ -519,7 +522,7 @@ export function PermitTable({
 
                     {/* STATUS */}
 
-                    <td className="border-t border-slate-100 px-4 py-3 align-middle">
+                    <td className="border-t border-slate-100 px-4 py-3 align-top">
                       <PermitStatusBadge
                         state={p.state}
                       />
