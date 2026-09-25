@@ -221,7 +221,22 @@ export function UsersTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="table-base">
+      {/* Fixed layout + colgroup below pin every column to a set share of
+          the container's width, so the table always fits the screen
+          instead of growing wider than it (that auto-growth — driven
+          mostly by the long qualified_for text — is what pushed "Reset
+          Password" off-screen and forced constant side-scrolling). Long
+          text now wraps onto extra lines within its column instead. */}
+      <table className="table-base table-fixed">
+        <colgroup>
+          <col className="w-[15%]" />
+          <col className="w-[20%]" />
+          <col className="w-[11%]" />
+          <col className="w-[10%]" />
+          <col className="w-[20%]" />
+          <col className="w-[12%]" />
+          <col className="w-[12%]" />
+        </colgroup>
         <thead>
           <tr>
             <th>Name</th>
@@ -242,7 +257,7 @@ export function UsersTable({
             if (isEditing) {
               return (
                 <tr key={user.id}>
-                  <td className="min-w-[180px] align-top">
+                  <td className="align-top">
                     <Input
                       label="Name"
                       value={editForm.full_name}
@@ -256,9 +271,9 @@ export function UsersTable({
                     />
                   </td>
 
-                  <td className="text-slate-600 align-top">{user.email}</td>
+                  <td className="text-slate-600 align-top break-words">{user.email}</td>
 
-                  <td className="min-w-[160px] align-top">
+                  <td className="align-top">
                     <Input
                       label="Department"
                       value={editForm.department}
@@ -272,7 +287,7 @@ export function UsersTable({
                     />
                   </td>
 
-                  <td className="min-w-[170px] align-top">
+                  <td className="align-top">
                     <Select
                       label="Role"
                       value={editForm.role}
@@ -291,7 +306,7 @@ export function UsersTable({
                     />
                   </td>
 
-                  <td className="min-w-[220px] align-top">
+                  <td className="align-top">
                     <div className="space-y-1">
                       {QUALIFICATION_OPTIONS.map((q) => (
                         <label
@@ -303,7 +318,7 @@ export function UsersTable({
                             checked={editForm.qualified_for.includes(q)}
                             onChange={() => toggleQualification(q)}
                           />
-                          <span>{q}</span>
+                          <span className="break-words">{q}</span>
                         </label>
                       ))}
                     </div>
@@ -311,7 +326,7 @@ export function UsersTable({
 
                   <td className="align-top">
                     <select
-                      className="input min-w-[110px]"
+                      className="input"
                       value={editForm.active ? "active" : "inactive"}
                       onChange={(e) =>
                         setEditForm((current) =>
@@ -331,7 +346,7 @@ export function UsersTable({
                   </td>
 
                   <td className="text-right align-top">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex flex-col items-end gap-2">
                       <Button
                         type="button"
                         loading={busyId === user.id}
@@ -355,30 +370,32 @@ export function UsersTable({
 
             return (
               <tr key={user.id}>
-                <td className="font-medium">
+                <td className="font-medium align-top break-words">
                   {user.full_name}
                   {isSelf ? (
                     <span className="ml-2 text-xs text-slate-400">(you)</span>
                   ) : null}
                 </td>
 
-                <td className="text-slate-600">{user.email}</td>
+                <td className="text-slate-600 align-top break-words">{user.email}</td>
 
-                <td className="text-slate-600">{user.department ?? "—"}</td>
+                <td className="text-slate-600 align-top break-words">
+                  {user.department ?? "—"}
+                </td>
 
-                <td>
+                <td className="align-top">
                   <Badge tone="info" className="capitalize">
                     {user.role}
                   </Badge>
                 </td>
 
-                <td className="text-xs text-slate-600">
+                <td className="text-xs text-slate-600 align-top break-words">
                   {(user.qualified_for ?? []).length
                     ? user.qualified_for.join(", ")
                     : "—"}
                 </td>
 
-                <td>
+                <td className="align-top">
                   <Badge tone={user.active ? "ok" : "neutral"}>
                     {user.active ? "Active" : "Inactive"}
                   </Badge>
@@ -391,43 +408,42 @@ export function UsersTable({
                   ) : null}
                 </td>
 
-                <td className="text-right">
-                  {/* Stacked instead of a single wide row so this column
-                      (and "Reset Password" specifically) never gets pushed
-                      off the right edge of the page. */}
-                  <div className="flex flex-col items-end gap-1">
-                    <div className="flex justify-end gap-3">
-                      <button
-                        type="button"
-                        className="text-sm text-blue-600 hover:underline disabled:opacity-50"
-                        disabled={busyId === user.id}
-                        onClick={() => startEdit(user)}
-                      >
-                        Edit
-                      </button>
-
-                      <button
-                        type="button"
-                        className="text-sm text-blue-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={busyId === user.id || (isSelf && user.active)}
-                        onClick={() => toggleActive(user)}
-                        title={
-                          isSelf && user.active
-                            ? "You cannot deactivate your own account"
-                            : undefined
-                        }
-                      >
-                        {user.active ? "Deactivate" : "Activate"}
-                      </button>
-                    </div>
+                <td className="text-right align-top">
+                  {/* Every action stacked on its own line (rather than
+                      "Edit" + "Deactivate" side by side) so this column
+                      never needs more width than the narrow share it's
+                      given, and nothing gets pushed off the right edge. */}
+                  <div className="flex flex-col items-end gap-1 text-sm">
+                    <button
+                      type="button"
+                      className="text-blue-600 hover:underline disabled:opacity-50"
+                      disabled={busyId === user.id}
+                      onClick={() => startEdit(user)}
+                    >
+                      Edit
+                    </button>
 
                     <button
                       type="button"
-                      className="text-sm text-blue-600 hover:underline disabled:opacity-50"
+                      className="text-blue-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={busyId === user.id || (isSelf && user.active)}
+                      onClick={() => toggleActive(user)}
+                      title={
+                        isSelf && user.active
+                          ? "You cannot deactivate your own account"
+                          : undefined
+                      }
+                    >
+                      {user.active ? "Deactivate" : "Activate"}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="text-blue-600 hover:underline disabled:opacity-50"
                       disabled={busyId === user.id}
                       onClick={() => openResetDialog(user)}
                     >
-                      Reset Password
+                      Reset
                     </button>
                   </div>
                 </td>

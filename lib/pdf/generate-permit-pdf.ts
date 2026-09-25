@@ -1210,13 +1210,19 @@ function drawSignatureRow(
     size: 8,
   });
 
-  text(ctx.page, "TIME", x + 145, y + 19, {
+  text(ctx.page, "TIME", x + 118, y + 19, {
     font: ctx.fontBold,
     size: 7,
     color: COLOR.muted,
   });
 
-  text(ctx.page, fmtTime(meta.submitted_at), x + 180, y + 19, {
+  // Every rendered time string is a fixed "HH:MM am/pm" shape — measured
+  // at 33.35pt wide at this font/size. The old x+180 start position left
+  // only ~24pt before the column divider at midX (x + w/2 ≈ 204.6 for
+  // the standard leftW), so the time text ran straight through the
+  // divider line and into the "SIGNATURE" label next to it. x+152 gives
+  // it a ~30pt safety margin before the divider instead.
+  text(ctx.page, fmtTime(meta.submitted_at), x + 152, y + 19, {
     font: ctx.font,
     size: 8,
   });
@@ -1821,15 +1827,27 @@ async function drawPhotos(
       },
     );
 
+    // Bug: with no caption, "Uploaded by" was hardcoded 22pt below the
+    // caption divider — only 2pt under the annotation-status line at
+    // 20pt, so the two rows rendered almost on top of each other (as
+    // seen in the "No annotation" / "Uploaded by" overlap). With a
+    // 2-line caption, the hardcoded 44pt likewise landed only 2pt below
+    // the actual 2nd caption line (at 42pt), overlapping there too.
+    // Compute the gap from how many caption lines were actually drawn,
+    // always leaving a consistent 12pt clearance below the last line.
+    let captionLineCount = 0;
+
     if (photo.caption) {
       const captionLines = wrap(
         `Comment: ${photo.caption}`,
         font,
         7.5,
         cardW - 20,
-      );
+      ).slice(0, 2);
 
-      captionLines.slice(0, 2).forEach((lineText, lineIdx) => {
+      captionLineCount = captionLines.length;
+
+      captionLines.forEach((lineText, lineIdx) => {
         page.drawText(lineText, {
           x: x + 10,
           y: A4.h - captionTop - 32 - lineIdx * 10,
@@ -1840,7 +1858,11 @@ async function drawPhotos(
       });
     }
 
-    const metaTop = captionTop + (photo.caption ? 44 : 22);
+    const metaTop =
+      captionTop +
+      (captionLineCount > 0
+        ? 32 + (captionLineCount - 1) * 10 + 12
+        : 32);
 
     page.drawText(
       `Uploaded by: ${photo.uploaderName || "—"}`,

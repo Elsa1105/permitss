@@ -52,16 +52,9 @@ export function AppShell({
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
-  // While the user still needs to set their own password, don't show
-  // any other nav items — otherwise they can click straight into
-  // Dashboard/Permits/Users before changing it (middleware bounces the
-  // page navigation back to /settings/change-password, but the nav
-  // items being visible/clickable at all was the confusing part).
-  const visibleNav = user.must_change_password
-    ? []
-    : NAV.filter(
-        (n) => !n.roles || n.roles.includes(user.role) || user.role === "admin",
-      );
+  const visibleNav = NAV.filter(
+    (n) => !n.roles || n.roles.includes(user.role) || user.role === "admin",
+  );
 
   async function signOut() {
     const supabase = createBrowserSupabase();
