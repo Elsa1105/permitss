@@ -7,7 +7,18 @@ import { NextResponse, type NextRequest } from "next/server";
 // scanning the permit's QR code is to see the endorsed PDF without
 // logging in. Without this entry, requests to that route were being
 // redirected to /login just like any other authenticated page.
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/public", "/api/public"];
+// "/display" is the unattended TV wallboard (app/display) showing
+// currently-active permits at reception/site office — nobody is logged
+// in on that screen, so it and its data API "/api/display" must be
+// reachable without a session too, same reasoning as "/public".
+const PUBLIC_PATHS = [
+  "/login",
+  "/auth/callback",
+  "/public",
+  "/api/public",
+  "/display",
+  "/api/display",
+];
 
 const CHANGE_PASSWORD_PATH = "/settings/change-password";
 
