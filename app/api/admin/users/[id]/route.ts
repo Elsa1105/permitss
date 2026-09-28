@@ -200,3 +200,105 @@ export async function PATCH(
 
   return NextResponse.json(data);
 }
+
+export async function DELETE(
+  _request: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const { id } = await ctx.params;
+
+  const supabase = await createServerSupabase();
+  const { data: auth } = await supabase.auth.getUser();
+
+  if (!auth.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { data: actor, error: actorError } = await supabase
+    .from("users")
+    .select("id, role, active")
+    .eq("id", auth.user.id)
+    .single();
+
+  if (actorError || !actor || actor.role !== "admin" || !actor.active) {
+    return NextResponse.json(
+      { error: "Admin role required" },
+      { status: 403 },
+    );
+  }
+
+  if (id === auth.user.id) {
+    return NextResponse.json(
+      { error: "You cannot delete your own account" },
+      { status: 400 },
+    );
+  }
+
+  const admin = createServiceRoleSupabase();
+
+  const { data: target, error: targetError } = await admin
+    .from("users")
+    .select("id, email, full_name, role")
+    .eq("id", id)
+    .single();
+
+  if (targetError || !target) {
+    return NextResponse.json(
+      { error: "Target user not found" },
+      { status: 404 },
+    );
+  }
+
+  // Remove the profile row first. If the user is still referenced by
+  // permits / audit records the database refuses (FK violation) and nothing
+  // has been removed yet, so the account stays intact.
+  const { error: profileError } = await admin
+    .from("users")
+    .delete()
+    .eq("id", id);
+
+  if (profileError) {
+    if (profileError.code === "23503") {
+      return NextResponse.json(
+        {
+          error:
+            "This user already has permit or audit records, so it cannot be deleted. Use Deactivate instead.",
+          detail: profileError.details ?? null,
+        },
+        { status: 409 },
+      );
+    }
+
+    return NextResponse.json({ error: profileError.message }, { status: 400 });
+  }
+
+  // Remove the login. "User not found" is fine (already gone / cascaded).
+  const { error: authDeleteError } = await admin.auth.admin.deleteUser(id);
+
+  if (authDeleteError && !/not found/i.test(authDeleteError.message)) {
+    return NextResponse.json(
+      {
+        error: `Profile deleted but login removal failed: ${authDeleteError.message}`,
+      },
+      { status: 500 },
+    );
+  }
+
+  await admin.rpc("write_audit", {
+    p_permit_id: null,
+    p_action: "user_updated",
+    p_from: null,
+    p_to: null,
+    p_reason: "User deleted",
+    p_metadata: {
+      deleted: true,
+      target_user_id: id,
+      target_email: target.email,
+      target_name: target.full_name,
+      target_role: target.role,
+      deleted_by: auth.user.id,
+    },
+  });
+
+  return NextResponse.json({ ok: true });
+}

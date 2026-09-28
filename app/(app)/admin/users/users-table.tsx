@@ -181,6 +181,38 @@ export function UsersTable({
     }
   }
 
+  async function deleteUser(user: UserRow) {
+    if (user.id === currentUserId) {
+      toast.error("You cannot delete your own account");
+      return;
+    }
+
+    const ok = window.confirm(
+      `Permanently delete ${user.full_name} (${user.email})?\n\nThis cannot be undone. If the user already has permit records, deletion will be refused and you should Deactivate instead.`,
+    );
+    if (!ok) return;
+
+    setBusyId(user.id);
+
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: "DELETE",
+      });
+
+      const body = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        toast.error(body.error || "Delete failed");
+        return;
+      }
+
+      toast.success(`${user.full_name} deleted`);
+      router.refresh();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function toggleActive(user: UserRow) {
     if (user.id === currentUserId && user.active) {
       toast.error("You cannot deactivate your own admin account");
@@ -444,6 +476,18 @@ export function UsersTable({
                       onClick={() => openResetDialog(user)}
                     >
                       Reset
+                    </button>
+
+                    <button
+                      type="button"
+                      className="text-red-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={busyId === user.id || isSelf}
+                      onClick={() => deleteUser(user)}
+                      title={
+                        isSelf ? "You cannot delete your own account" : undefined
+                      }
+                    >
+                      Delete
                     </button>
                   </div>
                 </td>
