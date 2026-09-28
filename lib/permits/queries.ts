@@ -10,6 +10,10 @@ import type {
   PermitWithJoins,
 } from "@/lib/supabase/types";
 import { createServiceRoleSupabase } from "@/lib/supabase/server";
+import {
+  effectivePermitState,
+  groupEndorsedDays,
+} from "@/lib/permits/effective-state";
 
 const PERMIT_WITH_JOINS = `
   *,
@@ -74,7 +78,34 @@ export async function listPermits(opts?: {
     throw error;
   }
 
-  return (data ?? []) as unknown as PermitWithJoins[];
+  const permits = (data ?? []) as unknown as PermitWithJoins[];
+
+  if (!permits.length) return permits;
+
+  // Show the real status: derive Approved/Active vs Pending Daily
+  // Endorsement from the endorsement records instead of trusting the stored
+  // state. Service role, because RLS can hide endorsement rows from some
+  // roles (same reason the permit detail page reads them this way).
+  const service = createServiceRoleSupabase();
+  const { data: endorsementRows, error: endorsementError } = await service
+    .from("permit_endorsements")
+    .select("permit_id, day_number")
+    .in(
+      "permit_id",
+      permits.map((p) => p.id),
+    );
+
+  if (endorsementError) {
+    console.error("Failed to load endorsements for status", endorsementError);
+    return permits;
+  }
+
+  const endorsedByPermit = groupEndorsedDays(endorsementRows);
+
+  return permits.map((p) => ({
+    ...p,
+    state: effectivePermitState(p, endorsedByPermit.get(p.id) ?? []),
+  }));
 }
 
 export async function getPermit(

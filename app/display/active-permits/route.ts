@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase/server";
+import {
+  createServerSupabase,
+  createServiceRoleSupabase,
+} from "@/lib/supabase/server";
+import {
+  effectivePermitState,
+  groupEndorsedDays,
+} from "@/lib/permits/effective-state";
 
 
 const ACTIVE_STATES = [
@@ -51,8 +58,35 @@ const supabase = await createServerSupabase();
     );
   }
 
+  const rows = (data ?? []) as unknown as Array<{
+    id: string;
+    state: string;
+    date_commencement: string;
+    date_completion: string;
+  }>;
+
+  const { data: endorsementRows } = rows.length
+    ? await createServiceRoleSupabase()
+        .from("permit_endorsements")
+        .select("permit_id, day_number")
+        .in(
+          "permit_id",
+          rows.map((r) => r.id),
+        )
+    : { data: [] };
+
+  const endorsedByPermit = groupEndorsedDays(endorsementRows);
+
+  const permits = rows.map((r) => ({
+    ...r,
+    state: effectivePermitState(
+      r as never,
+      endorsedByPermit.get(r.id) ?? [],
+    ),
+  }));
+
   return NextResponse.json({
-    permits: data ?? [],
+    permits,
     generated_at: new Date().toISOString(),
   });
 }

@@ -23,11 +23,17 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  await notifyPermitEvent({
-    supabase,
-    permitId: id,
-    event: "stage4_closed",
-  });
+  // The close-out is already committed at this point. A failed email
+  // (SMTP outage, bad recipient) must not make the user think it failed.
+  try {
+    await notifyPermitEvent({
+      supabase,
+      permitId: id,
+      event: "stage4_closed",
+    });
+  } catch (notifyError) {
+    console.error("[stage4] close-out notification failed", notifyError);
+  }
 
   return NextResponse.json(data);
 }

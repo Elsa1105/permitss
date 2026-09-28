@@ -1,3 +1,4 @@
+import { effectivePermitState } from "@/lib/permits/effective-state";
 import { notFound } from "next/navigation";
 import { createServiceRoleSupabase } from "@/lib/supabase/server";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
@@ -70,7 +71,22 @@ export default async function PublicPermitPage({
     notFound();
   }
 
-  const p = permit as unknown as PublicPermit;
+  const rawPermit = permit as unknown as PublicPermit;
+
+  // Derive Approved/Active vs Pending Daily Endorsement from endorsement
+  // records rather than the stored state.
+  const { data: endorsementRows } = await supabase
+    .from("permit_endorsements")
+    .select("day_number")
+    .eq("permit_id", rawPermit.id);
+
+  const p = {
+    ...rawPermit,
+    state: effectivePermitState(
+      rawPermit as never,
+      (endorsementRows ?? []).map((r) => r.day_number),
+    ),
+  } as PublicPermit;
 
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-8">

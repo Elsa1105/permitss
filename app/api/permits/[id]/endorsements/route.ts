@@ -50,18 +50,24 @@ export async function POST(
     ? data.filled_days
     : [];
 
-  await notifyPermitEvent({
-    supabase,
-    permitId: id,
-    event: "daily_endorsement",
-    note: `Day ${parsed.data.day_number} — ${parsed.data.action}${
-      parsed.data.remarks ? `: ${parsed.data.remarks}` : ""
-    }${
-      filledDays.length
-        ? ` (Day ${filledDays.join(", ")} auto-filled as Continue)`
-        : ""
-    }`,
-  });
+  // The endorsement is already committed; a failed email must not surface
+  // as a failed endorsement.
+  try {
+    await notifyPermitEvent({
+      supabase,
+      permitId: id,
+      event: "daily_endorsement",
+      note: `Day ${parsed.data.day_number} — ${parsed.data.action}${
+        parsed.data.remarks ? `: ${parsed.data.remarks}` : ""
+      }${
+        filledDays.length
+          ? ` (Day ${filledDays.join(", ")} auto-filled as Continue)`
+          : ""
+      }`,
+    });
+  } catch (notifyError) {
+    console.error("[endorsement] notification failed", notifyError);
+  }
 
   return NextResponse.json(data);
 }

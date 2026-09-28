@@ -19,7 +19,9 @@ export function Stage4Form({ permitId }: { permitId: string }) {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(body.error || "Close-out failed");
+        toast.error(
+          body.error || `Close-out failed (server error ${res.status})`,
+        );
         return;
       }
       toast.success("Permit closed");

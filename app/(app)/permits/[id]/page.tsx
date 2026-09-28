@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { PermitStatusBadge } from "@/components/permit/status-badge";
+import { effectivePermitState } from "@/lib/permits/effective-state";
 import { PermitDetail } from "@/components/permit/permit-detail";
 import { DOCUMENT_BUCKET, STORAGE_BUCKET } from "@/lib/supabase/env";
 import type {
@@ -154,7 +155,12 @@ export default async function PermitDetailPage({
             </h1>
 
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <PermitStatusBadge state={permit.state} />
+              <PermitStatusBadge
+                state={effectivePermitState(
+                  permit,
+                  endorsements.map((e) => e.day_number),
+                )}
+              />
 
               <span className="text-sm text-slate-500">
                 {permit.vessel_project} • {permit.location_of_work}
