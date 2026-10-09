@@ -225,23 +225,6 @@ Proprietary — Franklin Offshore International Pte Ltd / Codingo Assignments Pt
 
 
 
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-
-NEXT_PUBLIC_SUPABASE_URL= https://maaohglkwixmratdenan.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hYW9oZ2xrd2l4bXJhdGRlbmFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMzODQwNzksImV4cCI6MjA5ODk2MDA3OX0.GEpPOS8_zg_L__V6soxYx37TNBK4H6HJw7jnP3G3pjo
-SUPABASE_SERVICE_ROLE_KEY= eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hYW9oZ2xrd2l4bXJhdGRlbmFuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzM4NDA3OSwiZXhwIjoyMDk4OTYwMDc5fQ.2HaGKwXsgnD4lsEvOkD9WnhTbKmsfgq1jEi-sDIhbnA
-
-SUPABASE_DOCUMENT_BUCKET= permit-documents
-SUPABASE_IMAGE_BUCKET= permit-photos
-SUPABASE_STORAGE_BUCKET=permit-photos
-
-SMTP_HOST= smtp.office365.com
-SMTP_PORT=587
-SMTP_USER=epermit-ex@franklin.com.sg
-SMTP_PASSWORD=Welcome.2026!!
-EMAIL_FROM= epermit-ex@franklin.com.sg
-
-RESEND_API_KEY=
 
 ENABLE_EMAIL_NOTIFICATIONS=false
 MAINTENANCE_MODE=false
