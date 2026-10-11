@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { EndorsementSchema } from "@/lib/permits/schemas";
 import { notifyPermitEvent } from "@/lib/notifications/permit-emails";
+import { checkLiftingAccess } from "@/lib/permits/lifting-access";
 
 export async function POST(
   request: Request,
@@ -14,6 +15,15 @@ export async function POST(
 
   if (!auth.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Lifting permits: only the approved Lifting SRM pool (no-op for others).
+  const liftingDenied = await checkLiftingAccess(supabase, id, auth.user.id, [
+    "lifting_srm",
+  ]);
+
+  if (liftingDenied) {
+    return NextResponse.json({ error: liftingDenied }, { status: 403 });
   }
 
   const raw = await request.json().catch(() => null);
@@ -29,6 +39,38 @@ export async function POST(
       { error: parsed.error.issues[0]?.message ?? "Validation failed" },
       { status: 400 },
     );
+  }
+
+  // Prevent silent backfilling of missing days as if inspected.
+  // The existing SQL RPC auto-fills earlier missing days, so never call it
+  // for a later day while earlier days are outstanding.
+  const { data: permit, error: permitError } = await supabase
+    .from("permits")
+    .select("date_commencement")
+    .eq("id", id)
+    .single();
+  if (permitError || !permit) {
+    return NextResponse.json({ error: "Permit not found" }, { status: 404 });
+  }
+  const { data: priorDays, error: daysError } = await supabase
+    .from("permit_endorsements")
+    .select("day_number")
+    .eq("permit_id", id);
+  if (daysError) {
+    return NextResponse.json({ error: daysError.message }, { status: 400 });
+  }
+  const completed = new Set((priorDays ?? []).map((row) => row.day_number));
+  if (completed.has(parsed.data.day_number)) {
+    return NextResponse.json({ error: "This day is already endorsed" }, { status: 409 });
+  }
+  const missingEarlier = Array.from(
+    { length: parsed.data.day_number - 2 },
+    (_, index) => index + 2,
+  ).filter((day) => !completed.has(day));
+  if (missingEarlier.length > 0) {
+    return NextResponse.json({
+      error: `Endorse Day ${missingEarlier[0]} first. Automatic backfilling is disabled for safety.`,
+    }, { status: 400 });
   }
 
   const { data, error } = await supabase.rpc("permit_endorse_day", {

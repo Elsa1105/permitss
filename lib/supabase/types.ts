@@ -58,7 +58,10 @@ export type AuditAction =
 export type Qualification =
   | "hot_work_applicant"
   | "hot_work_assessor"
-  | "hot_work_srm";
+  | "hot_work_srm"
+  | "lifting_applicant"
+  | "lifting_assessor"
+  | "lifting_srm";
 
 export interface UserRow {
   id: string;

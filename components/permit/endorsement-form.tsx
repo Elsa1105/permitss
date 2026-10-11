@@ -45,8 +45,11 @@ export function EndorsementForm({
   );
   const [remarks, setRemarks] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
+  const [acknowledgedCatchup, setAcknowledgedCatchup] = React.useState(false);
+  const earlierOpenDays = pendingDays.filter((day) => day < selectedDay);
+  const hasCatchup = earlierOpenDays.length > 0;
 
-  const canSubmit = hasAvailableDay && isValidSelection;
+  const canSubmit = hasAvailableDay && isValidSelection && !hasCatchup;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -68,6 +71,16 @@ export function EndorsementForm({
 
     if (selectedDay > maxDay) {
       toast.error(`This permit only requires endorsement up to Day ${maxDay}`);
+      return;
+    }
+
+    if (hasCatchup) {
+      toast.error("Endorse the earlier missing days individually before this day");
+      return;
+    }
+
+    if (hasCatchup && remarks.trim().length === 0) {
+      toast.error("Record a reason for retrospective / catch-up endorsement");
       return;
     }
 
@@ -106,6 +119,7 @@ export function EndorsementForm({
           : `Day ${selectedDay} ${action}`,
       );
       setRemarks("");
+      setAcknowledgedCatchup(false);
       setAction("continue");
 
       // Move the picker to the next pending day, if any, so the SRM can
@@ -136,14 +150,11 @@ export function EndorsementForm({
           </p>
         ) : (
           <p className="mt-1 text-xs text-slate-500">
-            Click a day above (today or a missed day — public holiday, leave,
-            oversight) to select it, then submit below. Any earlier day that
-            hasn&apos;t been endorsed yet will be auto-filled as
-            &quot;Continue&quot; when you submit — e.g. submitting Day 5 with
-            Days 2–4 still open will fill Days 2–4 as Continue and record
-            your chosen action for Day 5. Any authorised SRM / Project
-            Manager for this site may submit the endorsement for leave
-            coverage.
+            Select an outstanding permit day. If you choose a later day, the
+            you must complete each earlier missing day individually first.
+            No day is automatically marked Continue. Weekends count as calendar
+            days until HSE approves a different rule. Actual submission times
+            remain recorded. Only an authorised SRM / Project Manager may endorse.
           </p>
         )}
       </div>
@@ -186,9 +197,30 @@ export function EndorsementForm({
         ) : null}
       </div>
 
+      {hasCatchup && isValidSelection ? (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 space-y-2 text-sm text-amber-950">
+          <p className="font-semibold">Retrospective endorsement / audit warning</p>
+          <p>
+            Submitting Day {selectedDay} will automatically fill outstanding Day
+            {earlierOpenDays.join(", Day ")} as Continue in the current database workflow.
+            This does not verify that those days were inspected. Record the
+            reason and obtain the applicable HSE approval before proceeding.
+          </p>
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={acknowledgedCatchup}
+              onChange={(e) => setAcknowledgedCatchup(e.target.checked)}
+            />
+            <span>I understand the earlier days will be filled retrospectively and confirm I am authorised to proceed.</span>
+          </label>
+        </div>
+      ) : null}
+
       <Textarea
-        label={`Remarks${action === "continue" ? " (optional)" : " (required)"}`}
-        required={action !== "continue"}
+        label={`Remarks${action === "continue" && !hasCatchup ? " (optional)" : " (required)"}`}
+        required={action !== "continue" || hasCatchup}
         value={remarks}
         onChange={(e) => setRemarks(e.target.value)}
         disabled={!canSubmit}
@@ -200,7 +232,7 @@ export function EndorsementForm({
       </p>
 
       <div className="flex justify-end">
-        <Button type="submit" loading={submitting} disabled={!canSubmit}>
+        <Button type="submit" loading={submitting} disabled={!canSubmit || (hasCatchup && !acknowledgedCatchup)}>
           Submit
         </Button>
       </div>

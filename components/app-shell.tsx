@@ -30,9 +30,15 @@ const NAV: NavItem[] = [
   { href: "/permits",       label: "Permits",   icon: ClipboardList },
   {
   href: "/permits/new",
-  label: "New Permit",
+  label: "New Hot Work Permit",
   icon: FilePlus,
   roles: ["applicant", "guest_applicant", "contractor", "srm", "admin"],
+  },
+  {
+  href: "/permits/new/lifting",
+  label: "New Lifting Permit",
+  icon: FilePlus,
+  roles: ["applicant", "srm", "admin"],
   },
   { href: "/admin/users",   label: "Users",     icon: Users,        roles: ["admin"] },
   { href: "/admin/audit",   label: "Audit Log", icon: Shield,       roles: ["admin"] },
@@ -50,6 +56,7 @@ export function AppShell({
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = React.useState(false);
+
 
   const visibleNav = NAV.filter(
     (n) => !n.roles || n.roles.includes(user.role) || user.role === "admin",
@@ -135,6 +142,15 @@ function SidebarContent({
   onNavigate?: () => void;
   formNo?: string;
 }) {
+  // Highlight only the most specific matching menu item, so "Permits" and
+  // "New Hot Work Permit" are not lit up while on a deeper page such as
+  // /permits/new/lifting.
+  const activeHref = nav
+    .filter(
+      (item) => pathname === item.href || pathname.startsWith(item.href + "/"),
+    )
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+
   return (
     <>
       <div className="p-4 border-b border-slate-200">
@@ -151,7 +167,7 @@ function SidebarContent({
 
       <nav className="flex-1 p-2 overflow-y-auto">
         {nav.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(item.href + "/");
+          const active = item.href === activeHref;
           const Icon = item.icon;
           return (
             <Link

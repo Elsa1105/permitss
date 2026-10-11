@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { HAZARD_TYPES } from "./hazards";
+import { LIFTING_CHECKLIST } from "./lifting";
 
 const HAZARD_VALUES = HAZARD_TYPES.map((h) => h.value) as [
   string,
@@ -39,6 +40,12 @@ const emptyString = z.preprocess(
 
 export const NewPermitSchema = z
   .object({
+    // Defaults to Hot Work so existing callers are unaffected.
+    permit_type: z
+      .enum(["hot_work_onshore", "lifting_operation"])
+      .optional()
+      .default("hot_work_onshore"),
+
     company_id: z.string().uuid("Company is required"),
     site_id: z.string().uuid("Site is required"),
 
@@ -128,6 +135,58 @@ export const Stage1Schema = z.object({
 });
 
 export type Stage1Input = z.infer<typeof Stage1Schema>;
+
+// ---------------------------------------------------------------------------
+// Lifting Permit
+// ---------------------------------------------------------------------------
+
+const liftingItemSchema = z.enum(["yes", "na"], {
+  errorMap: () => ({
+    message: "Every condition must be confirmed or marked NA",
+  }),
+});
+
+/** Stage I: all conditions of issue confirmed ("yes") or marked "na". */
+export const LiftingStage1Schema = z.object({
+  checklist_status: z.object(
+    Object.fromEntries(
+      LIFTING_CHECKLIST.map((item) => [item.key, liftingItemSchema]),
+    ),
+  ),
+});
+
+export type LiftingStage1Input = z.infer<typeof LiftingStage1Schema>;
+
+/** Stage II: Fit / Not Fit only (no condition checklist, unlike Hot Work). */
+export const LiftingStage2Schema = z
+  .object({
+    fit: z.boolean(),
+    remarks: emptyString.default(""),
+    corrective_action: z.string().nullable().optional().default(null),
+    rectification_date: z.string().nullable().optional().default(null),
+  })
+  .refine((v) => v.fit || v.remarks.trim().length > 0, {
+    message: "Remarks are required when marking not fit",
+    path: ["remarks"],
+  })
+  .refine(
+    (v) =>
+      v.fit ||
+      Boolean(v.corrective_action && v.corrective_action.trim().length > 0),
+    {
+      message: "Corrective action is required when marking not fit",
+      path: ["corrective_action"],
+    },
+  )
+  .refine(
+    (v) =>
+      v.fit ||
+      Boolean(v.rectification_date && v.rectification_date.trim().length > 0),
+    {
+      message: "Expected rectification date is required when marking not fit",
+      path: ["rectification_date"],
+    },
+  );
 
 export const Stage2ChecklistBooleanSchema = z.object({
   isolation_checked: z.boolean().optional().default(false),

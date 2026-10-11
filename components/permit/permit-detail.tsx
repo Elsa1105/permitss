@@ -14,6 +14,14 @@ import { Stage1Form } from "./stage-1-form";
 import { Stage2Form } from "./stage-2-form";
 import { Stage3Form } from "./stage-3-form";
 import { Stage4Form } from "./stage-4-form";
+import { Stage1LiftingForm } from "./stage-1-lifting-form";
+import { Stage2LiftingForm } from "./stage-2-lifting-form";
+import {
+  LIFTING_CHECKLIST,
+  hasLiftingQualification,
+  isLiftingPermit,
+  type LiftingQualification,
+} from "@/lib/permits/lifting";
 import { EndorsementForm } from "./endorsement-form";
 import { PhotoUploader } from "./photo-uploader";
 import { DocumentUploader } from "./document-uploader";
@@ -82,6 +90,12 @@ export function PermitDetail({
 
   const role = String(currentUser.role);
 
+  // Lifting permits use a separate pool of users (qualified_for lifting_*).
+  // For any other permit type hasLift() is always true, so Hot Work is unchanged.
+  const isLifting = isLiftingPermit(permit.permit_type);
+  const hasLift = (...allowed: LiftingQualification[]) =>
+    !isLifting || hasLiftingQualification(currentUser, ...allowed);
+
   const isApplicant = currentUser.id === permit.applicant_id;
 
   const isRealAssessor =
@@ -101,6 +115,7 @@ export function PermitDetail({
   const showStage1Form =
     !hasStage1 &&
     (isApplicant || isSrmOverride) &&
+    (isApplicant ? hasLift("lifting_applicant") : hasLift("lifting_srm")) &&
     canPerform(permit.state, "submit_stage1");
 
   const showStage1Override = !isApplicant && isSrmOverride && showStage1Form;
@@ -109,6 +124,7 @@ export function PermitDetail({
     hasStage1 &&
     !hasStage2 &&
     (isAssessor || role === "srm" || role === "admin") &&
+    hasLift("lifting_assessor", "lifting_srm") &&
     canPerform(permit.state, "submit_stage2");
 
   const showStage2Override =
@@ -119,12 +135,14 @@ export function PermitDetail({
     !hasStage3 &&
     isSrm &&
     canPerform(permit.state, "submit_stage3") &&
+    hasLift("lifting_srm") &&
     permit.applicant_id !== currentUser.id;
 
   const showStage4Form =
     hasStage3 &&
     !hasStage4 &&
     (isApplicant || role === "srm" || role === "admin") &&
+    (isApplicant ? hasLift("lifting_applicant") : hasLift("lifting_srm")) &&
     canPerform(permit.state, "submit_stage4");
 
   const showStage4Override =
@@ -134,6 +152,7 @@ export function PermitDetail({
     hasStage3 &&
     isSrm &&
     canPerform(permit.state, "endorse_day") &&
+    hasLift("lifting_srm") &&
     isMultiDay(permit);
 
   const editableBeforeAssessment =
@@ -159,10 +178,10 @@ export function PermitDetail({
   const applicantDepartment =
     p.display_applicant_department || permit.applicant?.department || "—";
 
-  const hazardText = formatHazards(
-    permit.hazard_types,
-    p.other_hazard_text ?? null,
-  );
+  // Lifting form: "Type of Hazard" is free text (stored in other_hazard_text).
+  const hazardText = isLifting
+    ? (p.other_hazard_text ?? "—")
+    : formatHazards(permit.hazard_types, p.other_hazard_text ?? null);
 
   // Day picker state: which day the SRM is about to endorse. Defaults to
   // today's day (or the earliest missed day) and stays in sync whenever the
@@ -201,9 +220,15 @@ export function PermitDetail({
           ) : null}
 
           <Field label="Job Type" value={p.job_type} />
-          <Field label="Vessel / Project" value={permit.vessel_project} />
+          <Field
+            label={isLifting ? "Vessel / Premises" : "Vessel / Project"}
+            value={permit.vessel_project}
+          />
           <Field label="Location of Work" value={permit.location_of_work} />
-          <Field label="Hazard Types" value={hazardText} />
+          <Field
+            label={isLifting ? "Type of Hazard" : "Hazard Types"}
+            value={hazardText}
+          />
 
           <Field
             label="Date of Commencement"
@@ -297,7 +322,11 @@ export function PermitDetail({
       </Card>
 
       <StageCard
-        title="Stage I — Raising of Permit"
+        title={
+          isLifting
+            ? "Stage I — Raising of Permit by Lifting Supervisor"
+            : "Stage I — Raising of Permit"
+        }
         meta={
           stage1
             ? {
@@ -308,7 +337,15 @@ export function PermitDetail({
             : null
         }
       >
-        {stage1 ? (
+        {stage1 && isLifting ? (
+          <LiftingChecklistDisplay
+            data={
+              stage1.data as {
+                checklist_status?: Record<string, string>;
+              }
+            }
+          />
+        ) : stage1 ? (
           <ChecklistDisplay data={stage1.data as Record<string, boolean>} />
         ) : showStage1Form ? (
           <>
@@ -316,13 +353,23 @@ export function PermitDetail({
               <OverrideNotice role={role} stage="I" />
             ) : null}
 
-            <Stage1Form
-              permitId={permit.id}
-              currentUser={{
-                full_name: currentUser.full_name,
-                department: currentUser.department,
-              }}
-            />
+            {isLifting ? (
+              <Stage1LiftingForm
+                permitId={permit.id}
+                currentUser={{
+                  full_name: currentUser.full_name,
+                  department: currentUser.department,
+                }}
+              />
+            ) : (
+              <Stage1Form
+                permitId={permit.id}
+                currentUser={{
+                  full_name: currentUser.full_name,
+                  department: currentUser.department,
+                }}
+              />
+            )}
           </>
         ) : (
           <PendingNotice msg="Stage I not yet submitted." />
@@ -330,7 +377,11 @@ export function PermitDetail({
       </StageCard>
 
       <StageCard
-        title="Stage II — Endorsement by Safety Assessor"
+        title={
+          isLifting
+            ? "Stage II — Endorsement by Assessor / WSH Coordinator / WSH Officer"
+            : "Stage II — Endorsement by Safety Assessor"
+        }
         meta={
           stage2
             ? {
@@ -343,7 +394,18 @@ export function PermitDetail({
             : null
         }
       >
-        {stage2 ? (
+        {stage2 && isLifting ? (
+          <LiftingStage2Display
+            data={
+              stage2.data as {
+                fit: boolean;
+                remarks?: string;
+                corrective_action?: string | null;
+                rectification_date?: string | null;
+              }
+            }
+          />
+        ) : stage2 ? (
           <Stage2Display
             data={
               stage2.data as {
@@ -360,7 +422,11 @@ export function PermitDetail({
               <OverrideNotice role={role} stage="II" />
             ) : null}
 
-            <Stage2Form permitId={permit.id} />
+            {isLifting ? (
+              <Stage2LiftingForm permitId={permit.id} />
+            ) : (
+              <Stage2Form permitId={permit.id} />
+            )}
 
             <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
               <div className="mb-3">
@@ -643,6 +709,73 @@ function Stage2Display({
             Remarks
           </span>
           {data.remarks}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function LiftingChecklistDisplay({
+  data,
+}: {
+  data: { checklist_status?: Record<string, string> };
+}) {
+  return (
+    <ul className="space-y-1.5 text-sm">
+      {LIFTING_CHECKLIST.map((item) => {
+        const value = data.checklist_status?.[item.key];
+
+        return (
+          <li key={item.key} className="flex items-start gap-2">
+            <StatusPill status={value === "yes" || value === "na" ? value : "unset"} />
+            <span>{item.label}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function LiftingStage2Display({
+  data,
+}: {
+  data: {
+    fit: boolean;
+    remarks?: string;
+    corrective_action?: string | null;
+    rectification_date?: string | null;
+  };
+}) {
+  return (
+    <div className="space-y-3">
+      <Badge tone={data.fit ? "ok" : "bad"}>
+        {data.fit ? "Fit for Lifting" : "Not Fit for Lifting"}
+      </Badge>
+
+      {data.remarks ? (
+        <p className="text-sm text-slate-700 whitespace-pre-wrap">
+          <span className="text-xs uppercase tracking-wide text-slate-500 block">
+            Remarks
+          </span>
+          {data.remarks}
+        </p>
+      ) : null}
+
+      {!data.fit && data.corrective_action ? (
+        <p className="text-sm text-slate-700 whitespace-pre-wrap">
+          <span className="text-xs uppercase tracking-wide text-slate-500 block">
+            Corrective Action Required
+          </span>
+          {data.corrective_action}
+        </p>
+      ) : null}
+
+      {!data.fit && data.rectification_date ? (
+        <p className="text-sm text-slate-700">
+          <span className="text-xs uppercase tracking-wide text-slate-500 block">
+            Expected Rectification Date
+          </span>
+          {formatDate(data.rectification_date)}
         </p>
       ) : null}
     </div>

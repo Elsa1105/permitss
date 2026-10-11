@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { Stage3Schema } from "@/lib/permits/schemas";
 import { notifyPermitEvent } from "@/lib/notifications/permit-emails";
+import { checkLiftingAccess } from "@/lib/permits/lifting-access";
 
 export async function POST(
   request: Request,
@@ -14,6 +15,15 @@ export async function POST(
 
   if (!auth.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Lifting permits: only the approved Lifting SRM / PM pool (no-op for others).
+  const liftingDenied = await checkLiftingAccess(supabase, id, auth.user.id, [
+    "lifting_srm",
+  ]);
+
+  if (liftingDenied) {
+    return NextResponse.json({ error: liftingDenied }, { status: 403 });
   }
 
   const body = await request.json().catch(() => null);

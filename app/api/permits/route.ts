@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { createServerSupabase, createServiceRoleSupabase } from "@/lib/supabase/server";
 import { NewPermitSchema } from "@/lib/permits/schemas";
 import { notifyPermitEvent } from "@/lib/notifications/permit-emails";
+import {
+  hasLiftingQualification,
+  isLiftingPermit,
+} from "@/lib/permits/lifting";
 
 const ALLOWED_CREATOR_ROLES = new Set([
   "applicant",
@@ -45,7 +49,7 @@ export async function POST(request: Request) {
 
   const { data: currentUser, error: userError } = await supabase
     .from("users")
-    .select("id, role, active")
+    .select("id, role, active, qualified_for")
     .eq("id", auth.user.id)
     .single();
 
@@ -66,6 +70,20 @@ export async function POST(request: Request) {
   if (!ALLOWED_CREATOR_ROLES.has(currentUser.role)) {
     return NextResponse.json(
       { error: "You are not allowed to create a permit" },
+      { status: 403 },
+    );
+  }
+
+  // Lifting permits are raised only by the approved Lifting Supervisors.
+  if (
+    isLiftingPermit(payload.permit_type) &&
+    !hasLiftingQualification(currentUser, "lifting_applicant")
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Only approved Lifting Supervisors can raise a Lifting Permit",
+      },
       { status: 403 },
     );
   }
@@ -136,7 +154,7 @@ export async function POST(request: Request) {
 
 const { data: serialData, error: serialErr } = await serviceSupabase.rpc(
   "next_permit_serial",
-  { p_permit_type: `hot_work_onshore_${companyCode.toLowerCase()}` },
+  { p_permit_type: `${payload.permit_type}_${companyCode.toLowerCase()}` },
 );
 
   if (serialErr || !serialData) {
@@ -150,7 +168,7 @@ const { data: serialData, error: serialErr } = await serviceSupabase.rpc(
     .from("permits")
     .insert({
       serial_no: serialData as string,
-      permit_type: "hot_work_onshore",
+      permit_type: payload.permit_type,
       company_id: payload.company_id,
       site_id: payload.site_id,
       state: "draft",

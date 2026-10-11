@@ -95,7 +95,7 @@ export default async function PublicPermitPage({
           </p>
 
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
-            Live Hot Work Permit
+            Live {p.permit_type === "lifting_operation" ? "Lifting" : "Hot Work"} Permit
           </h1>
 
           <p className="mt-2 text-sm text-slate-500">

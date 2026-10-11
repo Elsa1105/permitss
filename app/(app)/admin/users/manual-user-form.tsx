@@ -20,6 +20,9 @@ const QUALIFICATION_OPTIONS = [
   { value: "hot_work_applicant", label: "Hot Work Applicant" },
   { value: "hot_work_assessor", label: "Hot Work Assessor" },
   { value: "hot_work_srm", label: "Hot Work SRM" },
+  { value: "lifting_applicant", label: "Lifting Applicant (Lifting Supervisor)" },
+  { value: "lifting_assessor", label: "Lifting Assessor / WSH" },
+  { value: "lifting_srm", label: "Lifting SRM / PM" },
 ];
 
 interface Props {

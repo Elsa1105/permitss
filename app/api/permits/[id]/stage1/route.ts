@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { Stage1Schema } from "@/lib/permits/schemas";
+import { LiftingStage1Schema, Stage1Schema } from "@/lib/permits/schemas";
+import {
+  hasLiftingQualification,
+  isLiftingPermit,
+} from "@/lib/permits/lifting";
 import { notifyPermitEvent } from "@/lib/notifications/permit-emails";
 
 export async function POST(
@@ -17,6 +21,82 @@ export async function POST(
   }
 
   const body = await request.json().catch(() => null);
+
+  // ── Lifting Permit: own checklist + own user pool. Hot Work falls through
+  // to the original logic below, untouched.
+  const { data: typeRow } = await supabase
+    .from("permits")
+    .select("permit_type, applicant_id")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (isLiftingPermit(typeRow?.permit_type)) {
+    const liftingParsed = LiftingStage1Schema.safeParse(body);
+
+    if (!liftingParsed.success) {
+      return NextResponse.json(
+        {
+          error:
+            liftingParsed.error.issues[0]?.message ?? "Validation failed",
+        },
+        { status: 400 },
+      );
+    }
+
+    const { data: liftingUser } = await supabase
+      .from("users")
+      .select("role, active, qualified_for")
+      .eq("id", auth.user.id)
+      .maybeSingle();
+
+    if (!liftingUser || !liftingUser.active) {
+      return NextResponse.json(
+        { error: "User account is inactive" },
+        { status: 403 },
+      );
+    }
+
+    const isOwnLiftingPermit = typeRow?.applicant_id === auth.user.id;
+
+    if (
+      !hasLiftingQualification(
+        liftingUser,
+        isOwnLiftingPermit ? "lifting_applicant" : "lifting_srm",
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "You are not on the approved Lifting Permit user list for this action.",
+        },
+        { status: 403 },
+      );
+    }
+
+    const { data: liftingData, error: liftingError } = await supabase.rpc(
+      "permit_submit_stage1",
+      {
+        p_permit_id: id,
+        p_stage_data: { form: "lifting", ...liftingParsed.data },
+      },
+    );
+
+    if (liftingError) {
+      return NextResponse.json(
+        { error: liftingError.message },
+        { status: 400 },
+      );
+    }
+
+    await notifyPermitEvent({
+      supabase,
+      permitId: id,
+      event: "stage1_submitted",
+    });
+
+    return NextResponse.json(liftingData);
+  }
+
   const parsed = Stage1Schema.safeParse(body);
 
   if (!parsed.success) {

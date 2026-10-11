@@ -14,6 +14,7 @@ import type {
   PermitStageRow,
   PermitWithJoins,
 } from "@/lib/supabase/types";
+import { LIFTING_CHECKLIST, isLiftingPermit } from "@/lib/permits/lifting";
 
 export interface PdfBundle {
   permit: PermitWithJoins;
@@ -201,7 +202,13 @@ export async function generatePermitPdf(bundle: PdfBundle): Promise<Uint8Array> 
   const contentW = A4.w - 2 * MARGIN;
   const leftW = contentW - RIGHT_PANEL_W - 10;
 
-  drawHeader(ctx, contentW);
+  drawHeader(
+    ctx,
+    contentW,
+    isLiftingPermit(bundle.permit.permit_type)
+      ? "Application for Lifting Permit"
+      : "Hot Work Permit (Onshore)",
+  );
   ctx.y += 6;
 
   const headerStartY = ctx.y;
@@ -241,11 +248,25 @@ export async function generatePermitPdf(bundle: PdfBundle): Promise<Uint8Array> 
   drawDocuments(ctx, bundle.documents, leftW);
   ctx.y += 5;
 
-  band(ctx, "STAGE I : RAISING OF PERMIT-TO-WORK BY FOREMAN OR SUPERVISOR", leftW);
+  const lifting = isLiftingPermit(bundle.permit.permit_type);
+
+  band(
+    ctx,
+    lifting
+      ? "STAGE I : RAISING OF PERMIT-TO-WORK BY LIFTING SUPERVISOR"
+      : "STAGE I : RAISING OF PERMIT-TO-WORK BY FOREMAN OR SUPERVISOR",
+    leftW,
+  );
   drawStage1(ctx, bundle, leftW);
   ctx.y += 5;
 
-  band(ctx, "STAGE II : ENDORSEMENT BY SAFETY ASSESSOR", leftW);
+  band(
+    ctx,
+    lifting
+      ? "STAGE II : ENDORSEMENT BY ASSESSOR / WSH COORDINATOR / WSH OFFICER"
+      : "STAGE II : ENDORSEMENT BY SAFETY ASSESSOR",
+    leftW,
+  );
   drawStage2(ctx, bundle, leftW);
   ctx.y += 5;
 
@@ -257,7 +278,13 @@ export async function generatePermitPdf(bundle: PdfBundle): Promise<Uint8Array> 
   drawStage3(ctx, bundle, leftW);
   ctx.y += 5;
 
-  band(ctx, "STAGE IV : NOTIFICATION OF COMPLETION OF HOT WORK", leftW);
+  band(
+    ctx,
+    lifting
+      ? "STAGE IV : NOTIFICATION OF COMPLETION OF WORK"
+      : "STAGE IV : NOTIFICATION OF COMPLETION OF HOT WORK",
+    leftW,
+  );
   drawStage4(ctx, bundle, leftW);
 
   const photosWithBytes = bundle.photos.filter(
@@ -542,7 +569,11 @@ async function drawQrCode(
   }
 }
 
-function drawHeader(ctx: DrawCtx, w: number) {
+function drawHeader(
+  ctx: DrawCtx,
+  w: number,
+  title = "Hot Work Permit (Onshore)",
+) {
   const h = 58;
 
   box(ctx.page, MARGIN, ctx.y, 58, h, rgb(1, 1, 1));
@@ -574,7 +605,7 @@ function drawHeader(ctx: DrawCtx, w: number) {
     size: 8.5,
   });
 
-  text(ctx.page, "Hot Work Permit (Onshore)", MARGIN + 108, ctx.y + 30, {
+  text(ctx.page, title, MARGIN + 108, ctx.y + 30, {
     font: ctx.font,
     size: 8.5,
   });
@@ -751,6 +782,12 @@ function drawDayPanel(
 
 function drawStage1(ctx: DrawCtx, b: PdfBundle, w: number) {
   const stage = b.stages.find((s) => s.stage === "I");
+
+  if (isLiftingPermit(b.permit.permit_type)) {
+    drawLiftingStage1(ctx, b, w);
+    return;
+  }
+
   const data = (stage?.data as Record<string, boolean>) ?? {};
 
   const declaration =
@@ -781,6 +818,54 @@ function drawStage1(ctx: DrawCtx, b: PdfBundle, w: number) {
   });
 }
 
+function drawLiftingStage1(ctx: DrawCtx, b: PdfBundle, w: number) {
+  const stage = b.stages.find((s) => s.stage === "I");
+  const status =
+    (stage?.data as { checklist_status?: Record<string, string> })
+      ?.checklist_status ?? {};
+
+  const declaration =
+    "I have taken measures to render the area safe and fit for the lifting permit application. I shall comply with the following requirements prior to the commencement and during the duration of the work applied for. Conditions of issue must be confirmed; if not applicable, NA is indicated.";
+
+  for (const lineText of wrap(declaration, ctx.font, 8.3, w - 12)) {
+    text(ctx.page, lineText, MARGIN + 7, ctx.y, {
+      font: ctx.font,
+      size: 8.3,
+    });
+    ctx.y += 10;
+  }
+
+  ctx.y += 3;
+
+  const leftX = MARGIN + 7;
+  const rightX = MARGIN + 7 + (w - 14) / 2;
+  const half = Math.ceil(LIFTING_CHECKLIST.length / 2);
+
+  for (let i = 0; i < half; i++) {
+    const left = LIFTING_CHECKLIST[i];
+    const right = LIFTING_CHECKLIST[i + half];
+
+    const label = (item: (typeof LIFTING_CHECKLIST)[number]) =>
+      status[item.key] === "na" ? `${item.label} (NA)` : item.label;
+
+    drawCheckAt(ctx, leftX, ctx.y, status[left.key] === "yes", label(left));
+
+    if (right) {
+      drawCheckAt(ctx, rightX, ctx.y, status[right.key] === "yes", label(right));
+    }
+
+    ctx.y += 11.5;
+  }
+
+  ctx.y += 2;
+
+  drawSignatureRow(ctx, w, {
+    name: b.permit.applicant?.full_name ?? "",
+    department: b.permit.applicant?.department ?? "",
+    submitted_at: stage?.submitted_at,
+  });
+}
+
 function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
   const stage = b.stages.find((s) => s.stage === "II");
 
@@ -795,8 +880,11 @@ function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
       rectification_date?: string;
     }) ?? {};
 
-  const intro =
-    "I have reviewed the permit submission, supporting evidence, work conditions, and required safety controls. Based on this condition verification, I confirm whether the stated hot work location is fit to proceed.";
+  const lifting = isLiftingPermit(b.permit.permit_type);
+
+  const intro = lifting
+    ? "I had conducted a physical check and the application is supported. I hereby certify that I have examined the above stated location and that the said location is fit or not fit for the lifting work."
+    : "I have reviewed the permit submission, supporting evidence, work conditions, and required safety controls. Based on this condition verification, I confirm whether the stated hot work location is fit to proceed.";
 
   const introLines = wrap(intro, ctx.font, 8.2, w - 12);
 
@@ -821,8 +909,9 @@ function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
     return;
   }
 
+  const workLabel = lifting ? "LIFTING" : "HOT WORK";
   const resultLabel =
-    data.fit === true ? "FIT FOR HOT WORK" : "NOT FIT FOR HOT WORK";
+    data.fit === true ? `FIT FOR ${workLabel}` : `NOT FIT FOR ${workLabel}`;
 
   box(
     ctx.page,
@@ -859,7 +948,7 @@ function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
     ["evidence_reviewed", "Evidence reviewed"],
   ];
 
-  if (data.checklist || data.checklist_status) {
+  if (!lifting && (data.checklist || data.checklist_status)) {
     text(ctx.page, "Condition Verification Checklist", MARGIN + 7, ctx.y, {
       font: ctx.fontBold,
       size: 8,
@@ -1083,8 +1172,9 @@ function drawStage3(ctx: DrawCtx, b: PdfBundle, w: number) {
 function drawStage4(ctx: DrawCtx, b: PdfBundle, w: number) {
   const stage = b.stages.find((s) => s.stage === "IV");
 
-  const note =
-    "Completion of hot work has been notified. Identity, department, date, and time are recorded from the authenticated session.";
+  const note = `Completion of ${
+    isLiftingPermit(b.permit.permit_type) ? "the lifting work" : "hot work"
+  } has been notified. Identity, department, date, and time are recorded from the authenticated session.`;
 
   const lines = wrap(note, ctx.font, 8.2, w - 12);
 

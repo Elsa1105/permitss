@@ -25,6 +25,8 @@ interface Props {
   };
   companies: CompanyRow[];
   sites: SiteRow[];
+  /** Defaults to Hot Work so the existing page keeps working unchanged. */
+  permitType?: "hot_work_onshore" | "lifting_operation";
 }
 
 type ExtendedNewPermitInput = NewPermitInput & {
@@ -63,8 +65,14 @@ function daysBetweenInclusive(start: string, end: string) {
   return diff + 1;
 }
 
-export function NewPermitForm({ currentUser, companies, sites }: Props) {
+export function NewPermitForm({
+  currentUser,
+  companies,
+  sites,
+  permitType = "hot_work_onshore",
+}: Props) {
   const router = useRouter();
+  const isLifting = permitType === "lifting_operation";
   const today = React.useMemo(() => todayInSingapore(), []);
 
   const isGuestApplicant =
@@ -78,7 +86,8 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
     display_applicant_name:
       currentUser.full_name?.trim() || currentUser.id || "",
     display_applicant_department: currentUser.department ?? "",
-    job_type: "",
+    permit_type: permitType,
+    job_type: isLifting ? "Lifting" : "",
 
     vessel_project: "",
     location_of_work: "",
@@ -118,6 +127,8 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
   );
 
   const selectedOtherHazard = form.hazard_types.includes("other");
+  // Lifting form: "Type of Hazard" is a single free-text field.
+  const otherHazardActive = isLifting || selectedOtherHazard;
   const permitDays = daysBetweenInclusive(
     form.date_commencement,
     form.date_completion,
@@ -153,13 +164,15 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
       nextErrors.display_applicant_name = "Applicant name is required";
     }
 
-    if (selectedOtherHazard && !form.other_hazard_text.trim()) {
-      nextErrors.other_hazard_text = "Please specify the other hazard";
+    if (otherHazardActive && !form.other_hazard_text.trim()) {
+      nextErrors.other_hazard_text = isLifting
+        ? "Type of hazard is required"
+        : "Please specify the other hazard";
     }
 
     if (permitDays > 14) {
       nextErrors.date_completion =
-        "Hot Work Permit validity cannot exceed 14 days for Day 2–14 endorsement flow";
+        `${isLifting ? "Lifting" : "Hot Work"} Permit validity cannot exceed 14 days for Day 2–14 endorsement flow`;
     }
 
     return nextErrors;
@@ -172,10 +185,13 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
 
     const parsed = NewPermitSchema.safeParse({
       ...form,
+      permit_type: permitType,
+      job_type: isLifting ? "Lifting" : form.job_type,
+      hazard_types: isLifting ? ["other"] : form.hazard_types,
       display_applicant_name: form.display_applicant_name.trim(),
       display_applicant_department:
         form.display_applicant_department?.trim() ?? "",
-      other_hazard_text: selectedOtherHazard
+      other_hazard_text: otherHazardActive
         ? form.other_hazard_text.trim()
         : "",
       contractor: form.contractor?.trim() ?? "",
@@ -214,7 +230,7 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
         display_applicant_name: parsed.data.display_applicant_name.trim(),
         display_applicant_department:
           parsed.data.display_applicant_department.trim(),
-        other_hazard_text: selectedOtherHazard
+        other_hazard_text: otherHazardActive
           ? parsed.data.other_hazard_text.trim()
           : "",
       };
@@ -426,13 +442,14 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
               required
               name="job_type"
               placeholder="e.g. Welding, cutting, grinding, repair"
+              readOnly={isLifting}
               value={form.job_type}
               onChange={(e) => set("job_type", e.target.value)}
               error={errors.job_type}
             />
 
             <Input
-              label="Vessel / Project"
+              label={isLifting ? "Vessel / Premises" : "Vessel / Project"}
               required
               name="vessel_project"
               value={form.vessel_project}
@@ -470,7 +487,11 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
             label="Description of Work"
             required
             name="description"
-            placeholder="Describe what hot work will be performed (min 10 chars)"
+            placeholder={
+              isLifting
+                ? "Describe the lifting work (purpose) to be performed (min 10 chars)"
+                : "Describe what hot work will be performed (min 10 chars)"
+            }
             value={form.description}
             onChange={(e) => set("description", e.target.value)}
             error={errors.description}
@@ -519,6 +540,20 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
             </div>
           ) : null}
 
+          {isLifting ? (
+            <Textarea
+              label="Type of Hazard"
+              required
+              name="other_hazard_text"
+              placeholder="Free text, e.g. dropped load, swinging load, crushing"
+              value={form.other_hazard_text}
+              onChange={(e) => set("other_hazard_text", e.target.value)}
+              error={errors.other_hazard_text}
+            />
+          ) : null}
+
+          {!isLifting ? (
+            <>
           <div className="field">
             <span className="field-label field-required">Type of Hazard</span>
 
@@ -559,6 +594,8 @@ export function NewPermitForm({ currentUser, companies, sites }: Props) {
               onChange={(e) => set("other_hazard_text", e.target.value)}
               error={errors.other_hazard_text}
             />
+          ) : null}
+            </>
           ) : null}
         </CardBody>
 

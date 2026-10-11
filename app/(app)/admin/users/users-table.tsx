@@ -22,6 +22,9 @@ const QUALIFICATION_OPTIONS = [
   "hot_work_applicant",
   "hot_work_assessor",
   "hot_work_srm",
+  "lifting_applicant",
+  "lifting_assessor",
+  "lifting_srm",
 ];
 
 export function UsersTable({
