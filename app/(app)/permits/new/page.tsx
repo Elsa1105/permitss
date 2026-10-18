@@ -31,12 +31,12 @@ export default async function NewPermitPage({
   ];
 
   if (!allowedRoles.includes(user.role)) {
-    redirect("/dashboard?unauthorized=1");
+    redirect("/permits/access-denied?reason=role");
   }
 
   // Lifting permits are raised only by the approved Lifting Supervisors.
   if (isLifting && !hasLiftingQualification(user, "lifting_applicant")) {
-    redirect("/dashboard?unauthorized=1");
+    redirect("/permits/access-denied?reason=lifting");
   }
 
   const { companies, sites } = await getCompaniesAndSites(user.id, user.role);
@@ -48,7 +48,9 @@ export default async function NewPermitPage({
           {isLifting ? "New Lifting Permit" : "New Hot Work Permit"}
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          Fill in the header details...
+          {isLifting
+            ? "Complete the lifting operation details to create a new Lifting Permit. Only qualified Lifting Supervisors may submit this form."
+            : "Complete the work details to create a new Hot Work Permit."}
         </p>
       </div>
 

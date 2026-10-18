@@ -3,6 +3,7 @@ import { ArrowRight, FilePlus } from "lucide-react";
 import { requireUser } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { listPermits } from "@/lib/permits/queries";
+import { hasLiftingQualification } from "@/lib/permits/lifting";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty";
@@ -94,6 +95,7 @@ export default async function DashboardPage() {
   const recent = await listPermits({ limit: 10 });
 
   const canCreatePermit = PERMIT_CREATOR_ROLES.has(user.role);
+  const canCreateLifting = canCreatePermit && hasLiftingQualification(user, "lifting_applicant");
   const showRecentActivity = !APPLICANT_QUEUE_ROLES.has(user.role);
 
   return (
@@ -109,11 +111,16 @@ export default async function DashboardPage() {
         </div>
 
         {canCreatePermit ? (
-          <Link href="/permits/new">
-            <Button size="lg">
-              <FilePlus className="h-5 w-5" /> New Hot Work Permit
-            </Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/permits/new">
+              <Button size="lg"><FilePlus className="h-5 w-5" /> New Hot Work Permit</Button>
+            </Link>
+            {canCreateLifting ? (
+              <Link href="/permits/new/lifting">
+                <Button size="lg" variant="secondary"><FilePlus className="h-5 w-5" /> New Lifting Permit</Button>
+              </Link>
+            ) : null}
+          </div>
         ) : null}
       </div>
 

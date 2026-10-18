@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   ClipboardList,
-  FileCheck,
   FilePlus,
   LayoutDashboard,
   LogOut,
@@ -17,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 import type { UserRow } from "@/lib/supabase/types";
+import { hasLiftingQualification } from "@/lib/permits/lifting";
 
 interface NavItem {
   href: string;
@@ -27,7 +27,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { href: "/dashboard",     label: "Dashboard", icon: LayoutDashboard },
-  { href: "/permits",       label: "Permits",   icon: ClipboardList },
+  { href: "/permits",       label: "All Permits",   icon: ClipboardList },
   {
   href: "/permits/new",
   label: "New Hot Work Permit",
@@ -58,9 +58,10 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
 
-  const visibleNav = NAV.filter(
-    (n) => !n.roles || n.roles.includes(user.role) || user.role === "admin",
-  );
+  const visibleNav = NAV.filter((n) => {
+    if (n.href === "/permits/new/lifting" && !hasLiftingQualification(user, "lifting_applicant")) return false;
+    return !n.roles || n.roles.includes(user.role) || user.role === "admin";
+  });
 
   async function signOut() {
     const supabase = createBrowserSupabase();

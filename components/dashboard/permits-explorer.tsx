@@ -32,6 +32,7 @@ interface PermitsExplorerProps {
 export function PermitsExplorer({ permits }: PermitsExplorerProps) {
   const [query, setQuery] = React.useState("");
   const [jobType, setJobType] = React.useState("all");
+  const [permitType, setPermitType] = React.useState("all");
   const [status, setStatus] = React.useState("all");
   const [dateFilter, setDateFilter] = React.useState<DateFilter>("all");
   const [applicantVessel, setApplicantVessel] = React.useState("");
@@ -64,6 +65,9 @@ export function PermitsExplorer({ permits }: PermitsExplorerProps) {
     const normalizedApplicantVessel = applicantVessel.trim().toLowerCase();
 
     return (permits as PermitRow[]).filter((p) => {
+      // Permit category (independent of the free-text job type)
+      if (permitType !== "all" && p.permit_type !== permitType) return false;
+
       // Job Type
       if (jobType !== "all" && p.job_type !== jobType) return false;
 
@@ -114,10 +118,10 @@ export function PermitsExplorer({ permits }: PermitsExplorerProps) {
 
       return true;
     });
-  }, [permits, query, jobType, status, dateFilter, applicantVessel]);
+  }, [permits, query, jobType, permitType, status, dateFilter, applicantVessel]);
 
   const hasActiveFilters =
-    query || jobType !== "all" || status !== "all" || dateFilter !== "all" || applicantVessel;
+    query || jobType !== "all" || permitType !== "all" || status !== "all" || dateFilter !== "all" || applicantVessel;
 
   return (
     <div className="w-full">
@@ -135,6 +139,17 @@ export function PermitsExplorer({ permits }: PermitsExplorerProps) {
               className="h-9 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300"
             />
           </label>
+
+          <select
+            aria-label="Permit type"
+            value={permitType}
+            onChange={(e) => setPermitType(e.target.value)}
+            className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"
+          >
+            <option value="all">All Permit Types</option>
+            <option value="hot_work_onshore">Hot Work</option>
+            <option value="lifting_operation">Lifting</option>
+          </select>
 
           <select
             value={jobType}
@@ -192,6 +207,7 @@ export function PermitsExplorer({ permits }: PermitsExplorerProps) {
               onClick={() => {
                 setQuery("");
                 setJobType("all");
+                setPermitType("all");
                 setStatus("all");
                 setDateFilter("all");
                 setApplicantVessel("");
