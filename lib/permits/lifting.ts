@@ -59,6 +59,28 @@ export const LIFTING_CHECKLIST = [
   },
 ] as const;
 
+/** Checklist for Mobile / Crawler Crane — reference document page 2. */
+export const CRANE_CHECKLIST = [
+  { key: "lm_certificate", label: "Valid Lifting Machine certificate (less than 12 months old)" },
+  { key: "hoist_brakes", label: "Effective hoist and derricking braking mechanism" },
+  { key: "swing_brake", label: "Swing lock or swing brake prevents unintended rotation" },
+  { key: "capacity_chart", label: "Load capacity chart displayed in cabin" },
+  { key: "radius_alarm", label: "Load radius indicator with warning alarm" },
+  { key: "swl_marking", label: "Safe Working Load and LM number markings" },
+  { key: "anti_two_block", label: "Limit switch to prevent hook over-hoisting (anti-two-block)" },
+  { key: "boom_limit", label: "Boom over-derricking limit switch (crawler crane)" },
+  { key: "wire_lubrication", label: "Wire ropes well lubricated" },
+  { key: "hook_catch", label: "Crane hook fitted with safety catch" },
+  { key: "lockable_cabin", label: "Lockable crane cabin preventing unauthorized use" },
+  { key: "fire_extinguisher", label: "Fire extinguisher available on crane" },
+  { key: "maintenance_log", label: "Maintenance log book available in cabin" },
+  { key: "cabin_access", label: "Safe access to cabin and crane deck" },
+  { key: "wire_inspection", label: "Main and auxiliary hoist wire ropes inspected for damage" },
+  { key: "operating_manuals", label: "Manufacturer operating and maintenance manuals available" },
+] as const;
+
+export type CraneChecklistKey = (typeof CRANE_CHECKLIST)[number]["key"];
+
 export type LiftingChecklistKey = (typeof LIFTING_CHECKLIST)[number]["key"];
 export type LiftingChecklistValue = "yes" | "na";
 
