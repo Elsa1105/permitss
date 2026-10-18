@@ -250,8 +250,37 @@ export async function getCompaniesAndSites(userId: string, userRole?: string) {
     ...new Set((roles ?? []).map((r) => r.site_id).filter(Boolean)),
   ];
 
+  // Backward compatibility: some existing SRM/applicant accounts have a
+  // company assignment on users.company_id but were never migrated into
+  // user_site_roles. Only use that company's sites, never all sites.
   if (companyIds.length === 0) {
-    return { companies: [], sites: [] };
+    const { data: userProfile, error: profileError } = await supabase
+      .from("users")
+      .select("company_id, active")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (profileError) throw profileError;
+    if (!userProfile?.active || !userProfile.company_id) {
+      return { companies: [], sites: [] };
+    }
+
+    const { data: fallbackCompany, error: fallbackCompanyError } = await supabase
+      .from("companies")
+      .select("*")
+      .eq("id", userProfile.company_id)
+      .eq("active", true)
+      .maybeSingle();
+    if (fallbackCompanyError) throw fallbackCompanyError;
+    if (!fallbackCompany) return { companies: [], sites: [] };
+
+    const { data: fallbackSites, error: fallbackSitesError } = await supabase
+      .from("sites")
+      .select("*")
+      .eq("company_id", fallbackCompany.id)
+      .eq("active", true);
+    if (fallbackSitesError) throw fallbackSitesError;
+    return { companies: [fallbackCompany], sites: fallbackSites ?? [] };
   }
 
   const { data: companies } = await supabase
