@@ -37,7 +37,7 @@ const NAV: NavItem[] = [
   href: "/permits/new/lifting",
   label: "New Lifting Permit",
   icon: FilePlus,
-  roles: ["applicant", "srm", "admin"],
+  roles: ["applicant", "guest_applicant", "contractor", "srm", "admin"],
   },
   { href: "/admin/users",   label: "Users",     icon: Users,        roles: ["admin"] },
   { href: "/admin/audit",   label: "Audit Log", icon: Shield,       roles: ["admin"] },
@@ -58,9 +58,6 @@ export function AppShell({
 
 
   const visibleNav = NAV.filter((n) => {
-    // Keep the Lifting entry visible to Admins; the form enforces qualifications.
-    if (n.href === "/permits/new/lifting" && user.role === "admin") return true;
-    if (n.href === "/permits/new/lifting") return user.qualified_for?.includes("lifting_applicant") === true;
     return !n.roles || n.roles.includes(user.role) || user.role === "admin";
   });
 

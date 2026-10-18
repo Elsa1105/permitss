@@ -48,14 +48,6 @@ export default async function NewPermitPage({
         </p>
       </div>
 
-      {isLifting && (
-        <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          Interim setup: maximum 14-day validity with daily SRM endorsements.
-          The final validity period, endorsement requirement, and weekend rules
-          are pending HSE / Operations approval. Stage I must be submitted by
-          the appointed Lifting Supervisor using their own account.
-        </p>
-      )}
       <NewPermitForm
         permitType={permitType}
         currentUser={{
