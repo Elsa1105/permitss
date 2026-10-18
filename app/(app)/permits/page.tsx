@@ -23,7 +23,7 @@ export default async function PermitsPage() {
   const permits = await listPermits({ limit: 200 });
 
   const canCreatePermit = PERMIT_CREATOR_ROLES.has(user.role);
-  const canCreateLifting = canCreatePermit && hasLiftingQualification(user, "lifting_applicant");
+  const canCreateLifting = canCreatePermit && (user.role === "admin" || hasLiftingQualification(user, "lifting_applicant"));
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">

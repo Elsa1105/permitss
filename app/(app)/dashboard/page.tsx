@@ -95,7 +95,7 @@ export default async function DashboardPage() {
   const recent = await listPermits({ limit: 10 });
 
   const canCreatePermit = PERMIT_CREATOR_ROLES.has(user.role);
-  const canCreateLifting = canCreatePermit && hasLiftingQualification(user, "lifting_applicant");
+  const canCreateLifting = canCreatePermit && (user.role === "admin" || hasLiftingQualification(user, "lifting_applicant"));
   const showRecentActivity = !APPLICANT_QUEUE_ROLES.has(user.role);
 
   return (

@@ -16,7 +16,6 @@ import {
 import { cn } from "@/lib/utils";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 import type { UserRow } from "@/lib/supabase/types";
-import { hasLiftingQualification } from "@/lib/permits/lifting";
 
 interface NavItem {
   href: string;
@@ -59,7 +58,9 @@ export function AppShell({
 
 
   const visibleNav = NAV.filter((n) => {
-    if (n.href === "/permits/new/lifting" && !hasLiftingQualification(user, "lifting_applicant")) return false;
+    // Keep the Lifting entry visible to Admins; the form enforces qualifications.
+    if (n.href === "/permits/new/lifting" && user.role === "admin") return true;
+    if (n.href === "/permits/new/lifting") return user.qualified_for?.includes("lifting_applicant") === true;
     return !n.roles || n.roles.includes(user.role) || user.role === "admin";
   });
 
