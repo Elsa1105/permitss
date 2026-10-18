@@ -58,16 +58,16 @@ export async function POST(
 
     const isOwnLiftingPermit = typeRow?.applicant_id === auth.user.id;
 
+    // Meeting decision (6 Oct): Stage I must be completed by the appointed
+    // Lifting Supervisor, not a crane operator or an SRM acting for them.
     if (
-      !hasLiftingQualification(
-        liftingUser,
-        isOwnLiftingPermit ? "lifting_applicant" : "lifting_srm",
-      )
+      !isOwnLiftingPermit ||
+      !hasLiftingQualification(liftingUser, "lifting_applicant")
     ) {
       return NextResponse.json(
         {
           error:
-            "You are not on the approved Lifting Permit user list for this action.",
+            "Only the named applicant with Lifting Supervisor qualification can submit Stage I. Delegated Stage I submission is not permitted.",
         },
         { status: 403 },
       );

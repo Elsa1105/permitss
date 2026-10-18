@@ -17,6 +17,7 @@ import { Stage4Form } from "./stage-4-form";
 import { Stage1LiftingForm } from "./stage-1-lifting-form";
 import { Stage2LiftingForm } from "./stage-2-lifting-form";
 import {
+  CRANE_CHECKLIST,
   LIFTING_CHECKLIST,
   hasLiftingQualification,
   isLiftingPermit,
@@ -114,8 +115,8 @@ export function PermitDetail({
 
   const showStage1Form =
     !hasStage1 &&
-    (isApplicant || isSrmOverride) &&
-    (isApplicant ? hasLift("lifting_applicant") : hasLift("lifting_srm")) &&
+    (isLifting ? isApplicant : (isApplicant || isSrmOverride)) &&
+    (isLifting ? hasLift("lifting_applicant") : (isApplicant ? hasLift("lifting_applicant") : hasLift("lifting_srm"))) &&
     canPerform(permit.state, "submit_stage1");
 
   const showStage1Override = !isApplicant && isSrmOverride && showStage1Form;
@@ -473,7 +474,7 @@ export function PermitDetail({
             data={stage3.data as { decision: string; reason?: string }}
           />
         ) : showStage3Form ? (
-          <Stage3Form permitId={permit.id} />
+          <Stage3Form permitId={permit.id} isLifting={isLifting} />
         ) : (
           <PendingNotice
             msg={
@@ -718,9 +719,16 @@ function Stage2Display({
 function LiftingChecklistDisplay({
   data,
 }: {
-  data: { checklist_status?: Record<string, string> };
+  data: {
+    checklist_status?: Record<string, string>;
+    crane_checklist?: Record<string, { result?: string; remarks?: string }>;
+    crane_operator_name?: string;
+    lifting_supervisor_name?: string;
+    lm_certification_date?: string;
+  };
 }) {
   return (
+    <>
     <ul className="space-y-1.5 text-sm">
       {LIFTING_CHECKLIST.map((item) => {
         const value = data.checklist_status?.[item.key];
@@ -733,6 +741,21 @@ function LiftingChecklistDisplay({
         );
       })}
     </ul>
+    {data.crane_checklist ? (
+      <div className="mt-5 space-y-2">
+        <h4 className="font-semibold">Mobile / Crawler Crane Checklist</h4>
+        {data.lm_certification_date ? <p className="text-sm">LM certification: {data.lm_certification_date}</p> : null}
+        {CRANE_CHECKLIST.map((item, i) => (
+          <div key={item.key} className="text-sm flex gap-2">
+            <span>{i + 1}.</span>
+            <span>{item.label} — <strong>{data.crane_checklist?.[item.key]?.result?.toUpperCase() ?? "—"}</strong>
+              {data.crane_checklist?.[item.key]?.remarks ? ` (${data.crane_checklist[item.key]?.remarks})` : ""}</span>
+          </div>
+        ))}
+        <p className="text-sm">Inspected by: {data.crane_operator_name || "—"}; Supervised by: {data.lifting_supervisor_name || "—"}</p>
+      </div>
+    ) : null}
+    </>
   );
 }
 

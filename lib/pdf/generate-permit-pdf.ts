@@ -1130,7 +1130,10 @@ function drawStage3(ctx: DrawCtx, b: PdfBundle, w: number) {
       reason?: string;
     }) ?? {};
 
-  const lines = wrap(STAGE_III_SIMOPS_WORDING, ctx.font, 8.2, w - 12);
+  const stage3Wording = isLiftingPermit(b.permit.permit_type)
+    ? "I have evaluated the hazards and risks associated with the lifting operation and confirm that the work area and its surroundings have been inspected and assessed for safe execution."
+    : STAGE_III_SIMOPS_WORDING;
+  const lines = wrap(stage3Wording, ctx.font, 8.2, w - 12);
 
   for (const lineText of lines) {
     text(ctx.page, lineText, MARGIN + 7, ctx.y, {

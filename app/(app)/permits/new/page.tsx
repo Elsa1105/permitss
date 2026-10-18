@@ -5,7 +5,6 @@ import { getCompaniesAndSites } from "@/lib/permits/queries";
 import {
   PERMIT_TYPE_HOT_WORK,
   PERMIT_TYPE_LIFTING,
-  hasLiftingQualification,
 } from "@/lib/permits/lifting";
 
 export default async function NewPermitPage({
@@ -34,11 +33,6 @@ export default async function NewPermitPage({
     redirect("/permits/access-denied?reason=role");
   }
 
-  // Lifting permits are raised only by the approved Lifting Supervisors.
-  if (isLifting && !hasLiftingQualification(user, "lifting_applicant")) {
-    redirect("/permits/access-denied?reason=lifting");
-  }
-
   const { companies, sites } = await getCompaniesAndSites(user.id, user.role);
 
   return (
@@ -49,11 +43,19 @@ export default async function NewPermitPage({
         </h1>
         <p className="text-sm text-slate-500 mt-1">
           {isLifting
-            ? "Complete the lifting operation details to create a new Lifting Permit. Only qualified Lifting Supervisors may submit this form."
+            ? "Complete the lifting operation details to create a new Lifting Permit. A qualified Lifting Supervisor must complete Stage I before the permit can proceed."
             : "Complete the work details to create a new Hot Work Permit."}
         </p>
       </div>
 
+      {isLifting && (
+        <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Interim setup: maximum 14-day validity with daily SRM endorsements.
+          The final validity period, endorsement requirement, and weekend rules
+          are pending HSE / Operations approval. Stage I must be submitted by
+          the appointed Lifting Supervisor using their own account.
+        </p>
+      )}
       <NewPermitForm
         permitType={permitType}
         currentUser={{

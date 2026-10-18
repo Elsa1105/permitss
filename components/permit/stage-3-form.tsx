@@ -16,7 +16,10 @@ type Decision = "approve" | "reject";
 const STAGE_III_SIMOPS_WORDING =
   "I have reviewed the permit for SIMOPS coordination, work location, schedule, and potential conflicts with other activities. Based on the submitted permit details and Safety Assessor endorsement, I confirm that the hot work may proceed under coordination approval.";
 
-export function Stage3Form({ permitId }: { permitId: string }) {
+const LIFTING_STAGE_III_WORDING =
+  "I have evaluated the hazards and risks associated with the lifting operation and confirm that the work area and its surroundings have been inspected and assessed for safe execution.";
+
+export function Stage3Form({ permitId, isLifting = false }: { permitId: string; isLifting?: boolean }) {
   const router = useRouter();
   const [decision, setDecision] = React.useState<Decision | null>(null);
   const [reason, setReason] = React.useState("");
@@ -73,7 +76,7 @@ export function Stage3Form({ permitId }: { permitId: string }) {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <p className="text-sm text-slate-700">
-        {STAGE_III_SIMOPS_WORDING}
+        {isLifting ? LIFTING_STAGE_III_WORDING : STAGE_III_SIMOPS_WORDING}
       </p>
 
       <div className="grid grid-cols-2 gap-3">
