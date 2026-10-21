@@ -264,6 +264,7 @@ export async function DELETE(
           error:
             "This user already has permit or audit records, so it cannot be deleted. Use Deactivate instead.",
           detail: profileError.details ?? null,
+          can_deactivate: true,
         },
         { status: 409 },
       );

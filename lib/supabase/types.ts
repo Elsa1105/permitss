@@ -29,6 +29,7 @@ export type EndorsementAction = "continue" | "reject" | "revoke";
 export type AuditAction =
   | "created"
   | "created_by_guest_applicant"
+  | "permit_archived"
   | "user_created"
   | "submitted"
   | "fit"

@@ -36,6 +36,7 @@ export function UsersTable({
 }) {
   const router = useRouter();
 
+  const [linkedDeleteUser, setLinkedDeleteUser] = React.useState<UserRow | null>(null);
   const [busyId, setBusyId] = React.useState<string | null>(null);
   const [editingId, setEditingId] = React.useState<string | null>(null);
 
@@ -205,7 +206,11 @@ export function UsersTable({
       const body = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        toast.error(body.error || "Delete failed");
+        if (res.status === 409 && body.can_deactivate === true) {
+          setLinkedDeleteUser(user);
+        } else {
+          toast.error(body.error || "Delete failed");
+        }
         return;
       }
 
@@ -243,6 +248,7 @@ export function UsersTable({
       );
 
       router.refresh();
+      setLinkedDeleteUser(null);
     } finally {
       setBusyId(null);
     }
@@ -499,6 +505,18 @@ export function UsersTable({
           })}
         </tbody>
       </table>
+
+      <Dialog open={!!linkedDeleteUser} onClose={() => setLinkedDeleteUser(null)} title="Account cannot be deleted">
+        <div className="space-y-4 p-4">
+          <p className="text-sm text-slate-700">This account has linked permit or audit records. Permanent deletion is blocked to preserve history. You can deactivate the account instead.</p>
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setLinkedDeleteUser(null)}>Cancel</Button>
+            <Button disabled={!linkedDeleteUser?.active || busyId === linkedDeleteUser?.id} onClick={() => { if(linkedDeleteUser) void toggleActive(linkedDeleteUser); }}>
+              Deactivate account
+            </Button>
+          </div>
+        </div>
+      </Dialog>
 
       <Dialog
         open={!!resetTarget}

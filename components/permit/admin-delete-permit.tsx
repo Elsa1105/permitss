@@ -1,17 +1,27 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+
 export function AdminDeletePermit({id}:{id:string}) {
- const router=useRouter(); const [open,setOpen]=useState(false), [confirm,setConfirm]=useState(""), [reason,setReason]=useState(""), [busy,setBusy]=useState(false), [error,setError]=useState("");
- return <div className="rounded-lg border border-red-200 p-3 space-y-2">
-  {!open ? <button className="text-red-700 font-semibold" onClick={()=>setOpen(true)}>Archive draft permit (Admin)</button> : <>
-   <p className="text-sm">Only draft permits may be archived. This keeps the audit history. Type DELETE to confirm.</p>
+ const router=useRouter();
+ const [open,setOpen]=useState(false), [confirm,setConfirm]=useState(""), [reason,setReason]=useState(""), [busy,setBusy]=useState(false), [error,setError]=useState("");
+ return <div className="rounded-lg border border-red-200 bg-red-50/40 p-3 space-y-3">
+  <div className="flex flex-wrap items-center gap-2">
+   <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-red-700">Admin only</span>
+   <span className="text-sm font-medium text-red-900">Archive / delete access is restricted to admins.</span>
+  </div>
+
+  {!open ? <>
+   <p className="text-sm text-slate-700">Only admins can archive draft permits for cleanup. This is a soft-delete and keeps the audit history.</p>
+   <button className="text-red-700 font-semibold" onClick={()=>setOpen(true)}>Archive draft permit</button>
+  </> : <>
+   <p className="text-sm">Only <span className="font-semibold">admins</span> may archive draft permits. This keeps the audit history. Type DELETE to confirm.</p>
    <input className="w-full border p-2 rounded" placeholder="Reason for archiving" value={reason} onChange={e=>setReason(e.target.value)}/>
    <input className="w-full border p-2 rounded" placeholder="Type DELETE" value={confirm} onChange={e=>setConfirm(e.target.value)}/>
    {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
    <button disabled={busy || confirm!=="DELETE" || reason.trim().length<5} className="bg-red-700 text-white rounded px-3 py-2 disabled:opacity-50" onClick={async()=>{
     setBusy(true);setError(""); try {const res=await fetch(`/api/admin/permits/${id}`,{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({confirmation:confirm,reason})}); const data=await res.json(); if(!res.ok) throw new Error(data.error||"Archive failed");router.replace("/permits");router.refresh();} catch(e){setError(e instanceof Error?e.message:"Archive failed");} finally{setBusy(false)}
-   }}>Archive permit</button>
+   }}>{busy ? "Archiving..." : "Archive permit"}</button>
    <button className="ml-3" onClick={()=>setOpen(false)}>Cancel</button>
   </>}
  </div>;
