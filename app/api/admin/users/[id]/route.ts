@@ -201,92 +201,39 @@ export async function PATCH(
   return NextResponse.json(data);
 }
 
-export async function DELETE(
-  _request: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
+// A test account may only be purged after a separate explicit DBA verification
+// in the test_user_purge_approvals table. The RPC refuses any unapproved data.
+export async function DELETE(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-
   const supabase = await createServerSupabase();
   const { data: auth } = await supabase.auth.getUser();
-
-  if (!auth.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { data: actor, error: actorError } = await supabase
-    .from("users")
-    .select("id, role, active")
-    .eq("id", auth.user.id)
-    .single();
-
-  if (actorError || !actor || actor.role !== "admin" || !actor.active) {
-    return NextResponse.json(
-      { error: "Admin role required" },
-      { status: 403 },
-    );
-  }
-
-  if (id === auth.user.id) {
-    return NextResponse.json(
-      { error: "You cannot delete your own account" },
-      { status: 400 },
-    );
-  }
-
+  if (!auth.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const admin = createServiceRoleSupabase();
+  const { data: actor } = await admin.from("users").select("id,role,active")
+    .eq("id", auth.user.id).maybeSingle();
+  if (!actor?.active || actor.role !== "admin") return NextResponse.json({ error: "Admin required" }, { status: 403 });
+  if (id === auth.user.id) return NextResponse.json({ error: "Cannot delete your own account" }, { status: 400 });
 
-  const { data: target, error: targetError } = await admin
-    .from("users")
-    .select("id, email, full_name, role")
-    .eq("id", id)
-    .single();
+  const body = await request.json().catch(() => ({}));
+  const confirmed = body?.confirmation === "DELETE TEST ACCOUNT";
+  const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
+  if (!confirmed || reason.length < 10) return NextResponse.json({ error: "Type DELETE TEST ACCOUNT and supply a reason of at least 10 characters" }, { status: 400 });
 
-  if (targetError || !target) {
-    return NextResponse.json(
-      { error: "Target user not found" },
-      { status: 404 },
-    );
+  // Database transaction verifies approval, linked permit IDs and all FK references,
+  // deletes approved test rows only, and journals the deletion. Never bypass it.
+  const { data, error } = await admin.rpc("admin_purge_verified_test_user", {
+    p_target_user_id: id,
+    p_actor_id: auth.user.id,
+    p_reason: reason,
+  });
+  if (error) return NextResponse.json({ error: error.message, code: error.code }, { status: 409 });
+
+  // Auth Admin API is outside PostgreSQL transaction. If this fails, preserve
+  // the durable journal and tell the operator to reconcile in Supabase Auth.
+  const { error: authError } = await admin.auth.admin.deleteUser(id);
+  if (authError && !/not found/i.test(authError.message)) {
+    console.error("Test account profile purged; Auth cleanup required", { id, message: authError.message });
+    return NextResponse.json({ error: "Database cleanup completed, but Auth removal failed. Reconcile the login in Supabase Auth.", journal_id: data }, { status: 502 });
   }
-
-  // Atomic database cleanup: refuse linked permit/audit records and remove
-  // assignment-only rows together with the profile. No partial DB changes.
-  const { error: profileError } = await admin.rpc(
-    "admin_delete_unused_user_profile",
-    { p_target_user_id: id, p_actor_id: auth.user.id },
-  );
-
-  if (profileError) {
-    if (profileError.code === "23503" || profileError.code === "P0001") {
-      return NextResponse.json(
-        {
-          error: "Permanent deletion blocked: this account is still referenced by permit, audit, or other historical records.",
-          detail: profileError.message,
-          can_deactivate: true,
-        },
-        { status: 409 },
-      );
-    }
-    return NextResponse.json(
-      { error: profileError.message, hint: "Apply and review the admin_delete_unused_user_profile migration on staging first." },
-      { status: 400 },
-    );
-  }
-
-  // Remove the login. "User not found" is fine (already gone / cascaded).
-  const { error: authDeleteError } = await admin.auth.admin.deleteUser(id);
-
-  if (authDeleteError && !/not found/i.test(authDeleteError.message)) {
-    return NextResponse.json(
-      {
-        error: `Profile deleted but login removal failed: ${authDeleteError.message}`,
-      },
-      { status: 500 },
-    );
-  }
-
-  // A durable deletion journal entry is written by the database transaction.
-  // It cannot reference the removed target profile via an audit_log FK.
-
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, journal_id: data });
 }

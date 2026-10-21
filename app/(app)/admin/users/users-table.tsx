@@ -191,16 +191,18 @@ export function UsersTable({
       return;
     }
 
-    const ok = window.confirm(
-      `Permanently delete ${user.full_name} (${user.email})?\n\nThis cannot be undone. Deletion is allowed only if no historical permit/audit records refer to this account. Company/site assignments can be cleaned up automatically.`,
-    );
-    if (!ok) return;
+    const confirmation = window.prompt(`Permanent TEST account deletion: ${user.full_name} (${user.email}).\nOnly independently verified test data will be removed.\nType DELETE TEST ACCOUNT to continue:`);
+    if (confirmation !== "DELETE TEST ACCOUNT") return;
+    const reason = window.prompt("Enter a reason (at least 10 characters) for the deletion journal:");
+    if (!reason || reason.trim().length < 10) { toast.error("Deletion reason must be at least 10 characters"); return; }
 
     setBusyId(user.id);
 
     try {
       const res = await fetch(`/api/admin/users/${user.id}`, {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation, reason }),
       });
 
       const body = await res.json().catch(() => ({}));
@@ -508,7 +510,7 @@ export function UsersTable({
 
       <Dialog open={!!linkedDeleteUser} onClose={() => setLinkedDeleteUser(null)} title="Account cannot be deleted">
         <div className="space-y-4 p-4">
-          <p className="text-sm text-slate-700">This account is linked to permit, audit, or other historical records. Those references cannot be deleted safely. Only unused test accounts can be permanently deleted; you can deactivate this account instead.</p>
+          <p className="text-sm text-slate-700">This account has linked historical records or has not been independently verified as a test account. Request DBA approval of the exact test user and permit IDs before attempting permanent deletion. Operational data remains protected; you can deactivate instead.</p>
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setLinkedDeleteUser(null)}>Cancel</Button>
             <Button disabled={!linkedDeleteUser?.active || busyId === linkedDeleteUser?.id} onClick={() => { if(linkedDeleteUser) void toggleActive(linkedDeleteUser); }}>
