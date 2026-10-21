@@ -192,7 +192,7 @@ export function UsersTable({
     }
 
     const ok = window.confirm(
-      `Permanently delete ${user.full_name} (${user.email})?\n\nThis cannot be undone. If the user already has permit records, deletion will be refused and you should Deactivate instead.`,
+      `Permanently delete ${user.full_name} (${user.email})?\n\nThis cannot be undone. Deletion is allowed only if no historical permit/audit records refer to this account. Company/site assignments can be cleaned up automatically.`,
     );
     if (!ok) return;
 
@@ -508,7 +508,7 @@ export function UsersTable({
 
       <Dialog open={!!linkedDeleteUser} onClose={() => setLinkedDeleteUser(null)} title="Account cannot be deleted">
         <div className="space-y-4 p-4">
-          <p className="text-sm text-slate-700">This account has linked permit or audit records. Permanent deletion is blocked to preserve history. You can deactivate the account instead.</p>
+          <p className="text-sm text-slate-700">This account is linked to permit, audit, or other historical records. Those references cannot be deleted safely. Only unused test accounts can be permanently deleted; you can deactivate this account instead.</p>
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setLinkedDeleteUser(null)}>Cancel</Button>
             <Button disabled={!linkedDeleteUser?.active || busyId === linkedDeleteUser?.id} onClick={() => { if(linkedDeleteUser) void toggleActive(linkedDeleteUser); }}>

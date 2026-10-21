@@ -249,28 +249,28 @@ export async function DELETE(
     );
   }
 
-  // Remove the profile row first. If the user is still referenced by
-  // permits / audit records the database refuses (FK violation) and nothing
-  // has been removed yet, so the account stays intact.
-  const { error: profileError } = await admin
-    .from("users")
-    .delete()
-    .eq("id", id);
+  // Atomic database cleanup: refuse linked permit/audit records and remove
+  // assignment-only rows together with the profile. No partial DB changes.
+  const { error: profileError } = await admin.rpc(
+    "admin_delete_unused_user_profile",
+    { p_target_user_id: id, p_actor_id: auth.user.id },
+  );
 
   if (profileError) {
-    if (profileError.code === "23503") {
+    if (profileError.code === "23503" || profileError.code === "P0001") {
       return NextResponse.json(
         {
-          error:
-            "This user already has permit or audit records, so it cannot be deleted. Use Deactivate instead.",
-          detail: profileError.details ?? null,
+          error: "Permanent deletion blocked: this account is still referenced by permit, audit, or other historical records.",
+          detail: profileError.message,
           can_deactivate: true,
         },
         { status: 409 },
       );
     }
-
-    return NextResponse.json({ error: profileError.message }, { status: 400 });
+    return NextResponse.json(
+      { error: profileError.message, hint: "Apply and review the admin_delete_unused_user_profile migration on staging first." },
+      { status: 400 },
+    );
   }
 
   // Remove the login. "User not found" is fine (already gone / cascaded).
@@ -285,21 +285,8 @@ export async function DELETE(
     );
   }
 
-  await admin.rpc("write_audit", {
-    p_permit_id: null,
-    p_action: "user_updated",
-    p_from: null,
-    p_to: null,
-    p_reason: "User deleted",
-    p_metadata: {
-      deleted: true,
-      target_user_id: id,
-      target_email: target.email,
-      target_name: target.full_name,
-      target_role: target.role,
-      deleted_by: auth.user.id,
-    },
-  });
+  // A durable deletion journal entry is written by the database transaction.
+  // It cannot reference the removed target profile via an audit_log FK.
 
   return NextResponse.json({ ok: true });
 }
