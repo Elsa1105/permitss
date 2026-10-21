@@ -191,10 +191,10 @@ export function UsersTable({
       return;
     }
 
-    const confirmation = window.prompt(`Delete account: ${user.full_name} (${user.email}).\nUnused test accounts can be removed immediately; accounts with historical records require separate verification.\nType DELETE TEST ACCOUNT to continue:`);
-    if (confirmation !== "DELETE TEST ACCOUNT") return;
-    const reason = window.prompt("Enter a reason (at least 10 characters) for the deletion journal:");
-    if (!reason || reason.trim().length < 10) { toast.error("Deletion reason must be at least 10 characters"); return; }
+    const confirmation = window.prompt(`Remove access for ${user.full_name} (${user.email})?\nThis hides the account from Users and blocks sign-in. Permit and audit history stay intact.\nType REMOVE ACCOUNT to continue:`);
+    if (confirmation !== "REMOVE ACCOUNT") return;
+    const reason = window.prompt("Reason for removing this account (at least 10 characters):");
+    if (!reason || reason.trim().length < 10) { toast.error("Reason must be at least 10 characters"); return; }
 
     setBusyId(user.id);
 
@@ -216,7 +216,7 @@ export function UsersTable({
         return;
       }
 
-      toast.success(`${user.full_name} deleted`);
+      toast.success(`${user.full_name} removed from Users and sign-in disabled; historical records retained`);
       router.refresh();
     } finally {
       setBusyId(null);

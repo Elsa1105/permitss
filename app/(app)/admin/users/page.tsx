@@ -47,7 +47,7 @@ export default async function AdminUsersPage() {
 
   const [usersResult, companiesResult, sitesResult, siteRolesResult] =
     await Promise.all([
-      supabase.from("users").select("*").order("full_name", {
+      supabase.from("users").select("*").is("removed_at", null).order("full_name", {
         ascending: true,
       }),
 

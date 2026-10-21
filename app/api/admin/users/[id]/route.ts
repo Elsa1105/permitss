@@ -201,60 +201,42 @@ export async function PATCH(
   return NextResponse.json(data);
 }
 
-// A test account may only be purged after a separate explicit DBA verification
-// in the test_user_purge_approvals table. The RPC refuses any unapproved data.
+// Administrative removal revokes access but preserves the historical profile key
+// referenced by permits/audits. No per-user SQL approval is needed after setup.
 export async function DELETE(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const supabase = await createServerSupabase();
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (id === auth.user.id) return NextResponse.json({ error: "Cannot remove your own admin account" }, { status: 400 });
+
   const admin = createServiceRoleSupabase();
-  const { data: actor } = await admin.from("users").select("id,role,active")
+  const { data: actor } = await admin.from("users").select("id,role,active,removed_at")
     .eq("id", auth.user.id).maybeSingle();
-  if (!actor?.active || actor.role !== "admin") return NextResponse.json({ error: "Admin required" }, { status: 403 });
-  if (id === auth.user.id) return NextResponse.json({ error: "Cannot delete your own account" }, { status: 400 });
+  if (!actor?.active || actor.role !== "admin" || actor.removed_at) {
+    return NextResponse.json({ error: "Active admin required" }, { status: 403 });
+  }
 
-  const body = await request.json().catch(() => ({}));
-  const confirmed = body?.confirmation === "DELETE TEST ACCOUNT";
+  const body = await request.json().catch(() => null);
   const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
-  if (!confirmed || reason.length < 10) return NextResponse.json({ error: "Type DELETE TEST ACCOUNT and supply a reason of at least 10 characters" }, { status: 400 });
+  if (body?.confirmation !== "REMOVE ACCOUNT" || reason.length < 10) {
+    return NextResponse.json({ error: "Type REMOVE ACCOUNT and provide a reason of at least 10 characters" }, { status: 400 });
+  }
 
-  // Database transaction verifies approval, linked permit IDs and all FK references,
-  // deletes approved test rows only, and journals the deletion. Never bypass it.
-  const { data, error } = await admin.rpc("admin_purge_verified_test_user", {
-    p_target_user_id: id,
-    p_actor_id: auth.user.id,
-    p_reason: reason,
+  // Transaction: flag removal and write an immutable administrative journal entry.
+  const { data, error } = await admin.rpc("admin_remove_user_access", {
+    p_target_id: id, p_actor_id: auth.user.id, p_reason: reason,
   });
-  // A user with no historical references can be removed from the Users button
-  // without a separately issued DBA approval. The fallback RPC checks the
-  // entire no-history condition in a database transaction and journals it.
-  let journalId = data;
-  if (error) {
-    if (!error.message.includes("No valid independent test-data verification")) {
-      return NextResponse.json({ error: error.message, code: error.code, can_deactivate: true }, { status: 409 });
-    }
-    const unused = await admin.rpc("admin_delete_unused_test_user", {
-      p_target_user_id: id,
-      p_actor_id: auth.user.id,
-      p_reason: reason,
-    });
-    if (unused.error) {
-      return NextResponse.json({
-        error: "Account still has historical records or is not eligible for automatic deletion. Only genuinely unused test accounts can be deleted without independent review.",
-        detail: unused.error.message,
-        can_deactivate: true,
-      }, { status: 409 });
-    }
-    journalId = unused.data;
-  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 409 });
 
-  // Auth Admin API is outside PostgreSQL transaction. If this fails, preserve
-  // the durable journal and tell the operator to reconcile in Supabase Auth.
-  const { error: authError } = await admin.auth.admin.deleteUser(id);
-  if (authError && !/not found/i.test(authError.message)) {
-    console.error("Test account profile purged; Auth cleanup required", { id, message: authError.message });
-    return NextResponse.json({ error: "Database cleanup completed, but Auth removal failed. Reconcile the login in Supabase Auth.", journal_id: journalId }, { status: 502 });
+  // Keep the auth identity (referential integrity), but ban sign-in credentials.
+  // Re-run safe on retry; the DB user is already inactive if this fails.
+  const { error: banError } = await admin.auth.admin.updateUserById(id, {
+    ban_duration: "876000h",
+  });
+  if (banError && !/not found/i.test(banError.message)) {
+    console.error("User removed from directory but auth ban needs reconciliation", banError.message);
+    return NextResponse.json({ error: "User hidden and disabled, but Auth sign-in revocation requires administrator reconciliation.", journal_id: data }, { status: 502 });
   }
-  return NextResponse.json({ ok: true, journal_id: journalId });
+  return NextResponse.json({ ok: true, removed_from_directory: true, historical_records_preserved: true, journal_id: data });
 }
