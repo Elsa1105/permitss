@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { canCreatePermitType } from "@/lib/permits/type-permissions";
 import { requireUser } from "@/lib/auth/session";
 import { NewPermitForm } from "@/components/permit/new-permit-form";
 import { getCompaniesAndSites } from "@/lib/permits/queries";
@@ -29,7 +30,7 @@ export default async function NewPermitPage({
     "srm",
   ];
 
-  if (!allowedRoles.includes(user.role)) {
+  if (!canCreatePermitType(user, permitType)) {
     redirect("/permits/access-denied?reason=role");
   }
 

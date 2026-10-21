@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createBrowserSupabase } from "@/lib/supabase/client";
+import { canCreatePermitType } from "@/lib/permits/type-permissions";
 import type { UserRow } from "@/lib/supabase/types";
 
 interface NavItem {
@@ -58,6 +59,8 @@ export function AppShell({
 
 
   const visibleNav = NAV.filter((n) => {
+    if (n.href === "/permits/new") return canCreatePermitType(user, "hot_work_onshore");
+    if (n.href === "/permits/new/lifting") return canCreatePermitType(user, "lifting_operation");
     return !n.roles || n.roles.includes(user.role) || user.role === "admin";
   });
 

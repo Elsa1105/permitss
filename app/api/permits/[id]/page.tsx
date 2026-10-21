@@ -65,6 +65,7 @@ export default async function PublicPermitPage({
       `,
     )
     .eq("id", id)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (error || !permit) {

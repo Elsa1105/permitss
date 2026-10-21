@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { PermitStatusBadge } from "@/components/permit/status-badge";
 import { effectivePermitState } from "@/lib/permits/effective-state";
+import { AdminDeletePermit } from "@/components/permit/admin-delete-permit";
 import { PermitDetail } from "@/components/permit/permit-detail";
 import { DOCUMENT_BUCKET, STORAGE_BUCKET } from "@/lib/supabase/env";
 import type {
@@ -182,6 +183,7 @@ export default async function PermitDetailPage({
         </div>
       </div>
 
+      {user.role === "admin" && permit.state === "draft" ? <AdminDeletePermit id={id} /> : null}
       <PermitDetail
         currentUser={user}
         permit={permit}

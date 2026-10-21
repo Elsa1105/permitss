@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { FilePlus } from "lucide-react";
-import { hasLiftingQualification } from "@/lib/permits/lifting";
+import { canCreatePermitType } from "@/lib/permits/type-permissions";
 import { requireUser } from "@/lib/auth/session";
 import { listPermits } from "@/lib/permits/queries";
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,8 @@ export default async function PermitsPage() {
   const user = await requireUser();
   const permits = await listPermits({ limit: 200 });
 
-  const canCreatePermit = PERMIT_CREATOR_ROLES.has(user.role);
-  const canCreateLifting = canCreatePermit && (user.role === "admin" || hasLiftingQualification(user, "lifting_applicant"));
+  const canCreateHotWork = canCreatePermitType(user, "hot_work_onshore");
+  const canCreateLifting = canCreatePermitType(user, "lifting_operation");
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -36,11 +36,11 @@ export default async function PermitsPage() {
           </p>
         </div>
 
-        {canCreatePermit ? (
+        {canCreateHotWork || canCreateLifting ? (
           <div className="flex flex-wrap gap-2">
-            <Link href="/permits/new">
+            {canCreateHotWork ? <Link href="/permits/new">
               <Button><FilePlus className="h-4 w-4" /> New Hot Work Permit</Button>
-            </Link>
+            </Link> : null}
             {canCreateLifting ? (
               <Link href="/permits/new/lifting">
                 <Button variant="secondary"><FilePlus className="h-4 w-4" /> New Lifting Permit</Button>

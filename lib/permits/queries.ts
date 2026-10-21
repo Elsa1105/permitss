@@ -1,4 +1,5 @@
 import "server-only";
+import { canSeePermitType } from "@/lib/permits/type-permissions";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabase } from "@/lib/supabase/server";
 import type {
@@ -41,6 +42,10 @@ export async function listPermits(opts?: {
 }): Promise<PermitWithJoins[]> {
   const supabase = await createServerSupabase();
 
+  const { data: session } = await supabase.auth.getUser();
+  if (!session.user) return [];
+  const { data: viewer } = await supabase.from("users").select("role,active,qualified_for").eq("id",session.user.id).maybeSingle();
+  if (!viewer || !viewer.active) return [];
   let q = supabase
     .from("permits")
     .select(PERMIT_WITH_JOINS)
@@ -78,7 +83,8 @@ export async function listPermits(opts?: {
     throw error;
   }
 
-  const permits = (data ?? []) as unknown as PermitWithJoins[];
+  const permits = ((data ?? []) as unknown as PermitWithJoins[])
+    .filter(p => canSeePermitType(viewer, p.permit_type) && !(p as PermitWithJoins & { deleted_at?: string | null }).deleted_at);
 
   if (!permits.length) return permits;
 
@@ -125,7 +131,12 @@ export async function getPermit(
   throw new Error(error.message);
 }
 
-  return (data as unknown as PermitWithJoins) ?? null;
+  if (!data || (data as {deleted_at?: string | null}).deleted_at) return null;
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return null;
+  const { data: viewer } = await supabase.from("users").select("role,active,qualified_for").eq("id",auth.user.id).maybeSingle();
+  if (!viewer || !canSeePermitType(viewer, data.permit_type)) return null;
+  return data as unknown as PermitWithJoins;
 }
 
 export async function getPermitStages(

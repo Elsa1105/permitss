@@ -296,7 +296,7 @@ export default async function AdminUsersPage() {
                             type="submit"
                             className="text-sm text-red-600 hover:underline"
                           >
-                            Remove
+                            Remove Assignment
                           </button>
                         </form>
                       </td>
@@ -380,6 +380,9 @@ async function removeSiteRole(formData: FormData) {
 
   const service = createServiceRoleSupabase();
 
+  const { data: assignment } = await service.from("user_site_roles")
+    .select("id,user_id,company_id,site_id,role").eq("id",siteRoleId).maybeSingle();
+  if (!assignment) throw new Error("Assignment not found");
   const { error } = await service
     .from("user_site_roles")
     .delete()
@@ -389,5 +392,11 @@ async function removeSiteRole(formData: FormData) {
     throw new Error(error.message);
   }
 
+  const adminUser = await requireAdmin();
+  await service.rpc("write_audit", {
+    p_permit_id: null, p_action: "user_updated",p_from:null,p_to:null,
+    p_reason:"Company/site role assignment removed",
+    p_metadata:{ ...assignment, assignment_removed:true, updated_by:adminUser.id },
+  });
   revalidatePath("/admin/users");
 }

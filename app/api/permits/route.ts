@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase, createServiceRoleSupabase } from "@/lib/supabase/server";
+import { canCreatePermitType } from "@/lib/permits/type-permissions";
 import { NewPermitSchema } from "@/lib/permits/schemas";
 import { notifyPermitEvent } from "@/lib/notifications/permit-emails";
 import {
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!ALLOWED_CREATOR_ROLES.has(currentUser.role)) {
+  if (!canCreatePermitType(currentUser, payload.permit_type)) {
     return NextResponse.json(
       { error: "You are not allowed to create a permit" },
       { status: 403 },
