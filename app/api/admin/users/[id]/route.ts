@@ -226,14 +226,35 @@ export async function DELETE(request: Request, ctx: { params: Promise<{ id: stri
     p_actor_id: auth.user.id,
     p_reason: reason,
   });
-  if (error) return NextResponse.json({ error: error.message, code: error.code }, { status: 409 });
+  // A user with no historical references can be removed from the Users button
+  // without a separately issued DBA approval. The fallback RPC checks the
+  // entire no-history condition in a database transaction and journals it.
+  let journalId = data;
+  if (error) {
+    if (!error.message.includes("No valid independent test-data verification")) {
+      return NextResponse.json({ error: error.message, code: error.code, can_deactivate: true }, { status: 409 });
+    }
+    const unused = await admin.rpc("admin_delete_unused_test_user", {
+      p_target_user_id: id,
+      p_actor_id: auth.user.id,
+      p_reason: reason,
+    });
+    if (unused.error) {
+      return NextResponse.json({
+        error: "Account still has historical records or is not eligible for automatic deletion. Only genuinely unused test accounts can be deleted without independent review.",
+        detail: unused.error.message,
+        can_deactivate: true,
+      }, { status: 409 });
+    }
+    journalId = unused.data;
+  }
 
   // Auth Admin API is outside PostgreSQL transaction. If this fails, preserve
   // the durable journal and tell the operator to reconcile in Supabase Auth.
   const { error: authError } = await admin.auth.admin.deleteUser(id);
   if (authError && !/not found/i.test(authError.message)) {
     console.error("Test account profile purged; Auth cleanup required", { id, message: authError.message });
-    return NextResponse.json({ error: "Database cleanup completed, but Auth removal failed. Reconcile the login in Supabase Auth.", journal_id: data }, { status: 502 });
+    return NextResponse.json({ error: "Database cleanup completed, but Auth removal failed. Reconcile the login in Supabase Auth.", journal_id: journalId }, { status: 502 });
   }
-  return NextResponse.json({ ok: true, journal_id: data });
+  return NextResponse.json({ ok: true, journal_id: journalId });
 }

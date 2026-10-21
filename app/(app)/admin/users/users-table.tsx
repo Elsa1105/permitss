@@ -191,7 +191,7 @@ export function UsersTable({
       return;
     }
 
-    const confirmation = window.prompt(`Permanent TEST account deletion: ${user.full_name} (${user.email}).\nOnly independently verified test data will be removed.\nType DELETE TEST ACCOUNT to continue:`);
+    const confirmation = window.prompt(`Delete account: ${user.full_name} (${user.email}).\nUnused test accounts can be removed immediately; accounts with historical records require separate verification.\nType DELETE TEST ACCOUNT to continue:`);
     if (confirmation !== "DELETE TEST ACCOUNT") return;
     const reason = window.prompt("Enter a reason (at least 10 characters) for the deletion journal:");
     if (!reason || reason.trim().length < 10) { toast.error("Deletion reason must be at least 10 characters"); return; }
@@ -510,7 +510,7 @@ export function UsersTable({
 
       <Dialog open={!!linkedDeleteUser} onClose={() => setLinkedDeleteUser(null)} title="Account cannot be deleted">
         <div className="space-y-4 p-4">
-          <p className="text-sm text-slate-700">This account has linked historical records or has not been independently verified as a test account. Request DBA approval of the exact test user and permit IDs before attempting permanent deletion. Operational data remains protected; you can deactivate instead.</p>
+          <p className="text-sm text-slate-700">This account has linked historical records or has not been independently verified as a test account. This account has linked records or requires independent verification. Unused accounts can be deleted directly using the Delete button. Historical records are protected; you can deactivate instead.</p>
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setLinkedDeleteUser(null)}>Cancel</Button>
             <Button disabled={!linkedDeleteUser?.active || busyId === linkedDeleteUser?.id} onClick={() => { if(linkedDeleteUser) void toggleActive(linkedDeleteUser); }}>
