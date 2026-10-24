@@ -211,70 +211,29 @@ const { data: serialData, error: serialErr } = await serviceSupabase.rpc(
     );
   }
 
-  await serviceSupabase.rpc("write_audit", {
-    p_permit_id: insert.data.id,
-    p_action: isGuestApplicant ? "created_by_guest_applicant" : "created",
-    p_from: null,
-    p_to: "draft",
-    p_reason: null,
-    p_metadata: {
-      actor_role: currentUser.role,
-      company_id: payload.company_id,
-      site_id: payload.site_id,
-
-      display_applicant_name: payload.display_applicant_name || null,
-      display_applicant_department:
-        payload.display_applicant_department || null,
-      job_type: payload.job_type,
-
-      hazard_types: payload.hazard_types,
-      other_hazard_text: payload.other_hazard_text || null,
-
-      contractor_company: payload.contractor_company || null,
-      contractor_supervisor_name:
-        payload.contractor_supervisor_name || null,
-      contractor_supervisor_registration_no:
-        payload.contractor_supervisor_registration_no || null,
-      worker_briefing_acknowledged:
-        payload.worker_briefing_acknowledged ?? false,
-      top_controls_summary: payload.top_controls_summary || null,
-    },
+  // Log creation once, with the authenticated actor explicitly supplied.
+  // Service-role RPCs cannot infer the acting user from auth.uid().
+  const { error: auditError } = await serviceSupabase.from("audit_log").insert({
+    permit_id: insert.data.id,
+    actor_id: auth.user.id,
+    action: isGuestApplicant ? "created_by_guest_applicant" : "created",
+    from_state: null,
+    to_state: "draft",
+    reason: null,
   });
+  if (auditError) {
+    console.error("Failed to record permit creation audit", auditError);
+    // Creation has committed; do not retry insert blindly (it would duplicate a permit).
+    return NextResponse.json({
+      error: "Permit was created, but its audit entry failed. Contact an administrator; do not resubmit.",
+      permit_id: insert.data.id,
+    }, { status: 500 });
+  }
 
   await notifyPermitEvent({
     supabase: serviceSupabase,
     permitId: insert.data.id,
     event: "stage1_submitted",
-  });
-
-  await serviceSupabase.rpc("write_audit", {
-    p_permit_id: insert.data.id,
-    p_action: isGuestApplicant ? "created_by_guest_applicant" : "created",
-    p_from: null,
-    p_to: "draft",
-    p_reason: null,
-    p_metadata: {
-      actor_role: currentUser.role,
-      company_id: payload.company_id,
-      site_id: payload.site_id,
-
-      display_applicant_name: payload.display_applicant_name || null,
-      display_applicant_department:
-        payload.display_applicant_department || null,
-      job_type: payload.job_type,
-
-      hazard_types: payload.hazard_types,
-      other_hazard_text: payload.other_hazard_text || null,
-
-      contractor_company: payload.contractor_company || null,
-      contractor_supervisor_name:
-        payload.contractor_supervisor_name || null,
-      contractor_supervisor_registration_no:
-        payload.contractor_supervisor_registration_no || null,
-      worker_briefing_acknowledged:
-        payload.worker_briefing_acknowledged ?? false,
-      top_controls_summary: payload.top_controls_summary || null,
-    },
   });
 
   return NextResponse.json(insert.data, { status: 201 });

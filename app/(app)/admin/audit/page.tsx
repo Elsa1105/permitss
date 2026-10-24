@@ -1,5 +1,5 @@
 import { requireAdmin } from "@/lib/auth/session";
-import { createServerSupabase } from "@/lib/supabase/server";
+import { createServiceRoleSupabase } from "@/lib/supabase/server";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,9 @@ interface AuditRow {
   ts: string;
   permit: { serial_no: string } | null;
   actor: { full_name: string; email: string } | null;
+  permit_serial_snapshot: string | null;
+  actor_name_snapshot: string | null;
+  actor_email_snapshot: string | null;
 }
 
 export default async function AdminAuditPage({
@@ -25,20 +28,22 @@ export default async function AdminAuditPage({
   searchParams: Promise<{ permit?: string; actor?: string; limit?: string }>;
 }) {
   await requireAdmin();
-  const supabase = await createServerSupabase();
+  // Admin is verified above. Service role reads historical joins even if RLS hides archived permits.
+  const supabase = createServiceRoleSupabase();
   const sp = await searchParams;
   const limit = Math.min(Number(sp.limit ?? 200), 500);
 
   let q = supabase
     .from("audit_log")
     .select(
-      "id, permit_id, actor_id, action, from_state, to_state, reason, ts, permit:permit_id(serial_no), actor:actor_id(full_name, email)",
+      "id, permit_id, actor_id, action, from_state, to_state, reason, ts, permit_serial_snapshot, actor_name_snapshot, actor_email_snapshot, permit:permit_id(serial_no), actor:actor_id(full_name, email)",
     )
     .order("ts", { ascending: false })
     .limit(limit);
   if (sp.permit) q = q.eq("permit_id", sp.permit);
   if (sp.actor) q = q.eq("actor_id", sp.actor);
-  const { data } = await q;
+  const { data, error } = await q;
+  if (error) throw new Error(`Unable to load audit history: ${error.message}`);
   const rows = (data ?? []) as unknown as AuditRow[];
 
   return (
@@ -85,11 +90,11 @@ export default async function AdminAuditPage({
                       {formatDateTime(r.ts)}
                     </td>
                     <td className="font-mono text-xs">
-                      {r.permit?.serial_no ?? "—"}
+                      {r.permit_serial_snapshot ?? r.permit?.serial_no ?? (r.permit_id ? `ID: ${r.permit_id.slice(0, 8)}` : "—")}
                     </td>
                     <td className="text-sm">
-                      <div>{r.actor?.full_name ?? "—"}</div>
-                      <div className="text-xs text-slate-500">{r.actor?.email ?? ""}</div>
+                      <div>{r.actor_name_snapshot ?? r.actor?.full_name ?? (r.actor_id ? `ID: ${r.actor_id.slice(0, 8)}` : "—")}</div>
+                      <div className="text-xs text-slate-500">{r.actor_email_snapshot ?? r.actor?.email ?? ""}</div>
                     </td>
                     <td>
                       <Badge tone={badgeTone(r.action)}>{r.action}</Badge>

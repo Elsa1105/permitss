@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerSupabase } from "@/lib/supabase/server";
+import { createServerSupabase, createServiceRoleSupabase } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   const supabase = await createServerSupabase();
@@ -18,10 +18,10 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 5000), 50000);
 
-  const { data, error } = await supabase
+  const { data, error } = await createServiceRoleSupabase()
     .from("audit_log")
     .select(
-      "id, ts, action, from_state, to_state, reason, permit:permit_id(serial_no), actor:actor_id(email, full_name)",
+      "id, ts, permit_id, actor_id, action, from_state, to_state, reason, permit_serial_snapshot, actor_name_snapshot, actor_email_snapshot, permit:permit_id(serial_no), actor:actor_id(email, full_name)",
     )
     .order("ts", { ascending: false })
     .limit(limit);
@@ -29,6 +29,11 @@ export async function GET(request: Request) {
 
   const rows = (data ?? []) as unknown as Array<{
     id: number;
+    permit_id: string | null;
+    actor_id: string | null;
+    permit_serial_snapshot: string | null;
+    actor_name_snapshot: string | null;
+    actor_email_snapshot: string | null;
     ts: string;
     action: string;
     from_state: string | null;
@@ -46,9 +51,9 @@ export async function GET(request: Request) {
       [
         r.id,
         r.ts,
-        r.permit?.serial_no ?? "",
-        r.actor?.email ?? "",
-        r.actor?.full_name ?? "",
+        r.permit_serial_snapshot ?? r.permit?.serial_no ?? r.permit_id ?? "",
+        r.actor_email_snapshot ?? r.actor?.email ?? "",
+        r.actor_name_snapshot ?? r.actor?.full_name ?? r.actor_id ?? "",
         r.action,
         r.from_state ?? "",
         r.to_state ?? "",
