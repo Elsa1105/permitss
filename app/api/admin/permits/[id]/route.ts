@@ -18,12 +18,8 @@ export async function DELETE(request: Request, ctx: { params: Promise<{ id: stri
   }
 
   const body = await request.json().catch(() => null);
-  const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
-  if (body?.confirmation !== "DELETE" || reason.length < 5) {
-    return NextResponse.json(
-      { error: "Type DELETE and provide a reason (at least 5 characters)" },
-      { status: 400 },
-    );
+  if (body?.confirmation !== "DELETE") {
+    return NextResponse.json({ error: "Type DELETE to confirm" }, { status: 400 });
   }
 
   const admin = createServiceRoleSupabase();
@@ -32,7 +28,7 @@ export async function DELETE(request: Request, ctx: { params: Promise<{ id: stri
   const { data, error } = await admin.rpc("admin_archive_draft_permit", {
     p_permit_id: id,
     p_actor_id: auth.user.id,
-    p_reason: reason,
+    p_reason: "Admin archived draft permit via confirmed DELETE action",
   });
   if (error) {
     return NextResponse.json({ error: error.message }, { status: error.code === "P0001" ? 409 : 400 });

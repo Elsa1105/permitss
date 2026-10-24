@@ -105,7 +105,9 @@ export default async function AdminUsersPage() {
   const users = (usersResult.data ?? []) as UserRow[];
   const companies = (companiesResult.data ?? []) as CompanyRow[];
   const sites = (sitesResult.data ?? []) as SiteRow[];
-  const siteRoles = (siteRolesResult.data ?? []) as unknown as SiteRoleWithJoins[];
+  const siteRoles = ((siteRolesResult.data ?? []) as unknown as SiteRoleWithJoins[]).filter((assignment) =>
+    users.some((user) => user.id === assignment.user_id)
+  );
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
