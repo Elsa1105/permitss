@@ -24,6 +24,7 @@ export default async function PermitsPage() {
 
   const canCreateHotWork = canCreatePermitType(user, "hot_work_onshore");
   const canCreateLifting = canCreatePermitType(user, "lifting_operation");
+  const canCreateBunkering = canCreatePermitType(user, "bunkering_operation");
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -31,12 +32,12 @@ export default async function PermitsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">All Permits</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Search, filter, open, and manage Hot Work and Lifting Permits accessible to you.
+            Search, filter, open, and manage Hot Work, Lifting and Hazardous Work Permits accessible to you.
             {" "}{permits.length} permit{permits.length === 1 ? "" : "s"} listed.
           </p>
         </div>
 
-        {canCreateHotWork || canCreateLifting ? (
+        {canCreateHotWork || canCreateLifting || canCreateBunkering ? (
           <div className="flex flex-wrap gap-2">
             {canCreateHotWork ? <Link href="/permits/new">
               <Button><FilePlus className="h-4 w-4" /> New Hot Work Permit</Button>
@@ -46,13 +47,18 @@ export default async function PermitsPage() {
                 <Button variant="secondary"><FilePlus className="h-4 w-4" /> New Lifting Permit</Button>
               </Link>
             ) : null}
+            {canCreateBunkering ? (
+              <Link href="/permits/new/bunkering">
+                <Button variant="secondary"><FilePlus className="h-4 w-4" /> New Hazardous Work Permit</Button>
+              </Link>
+            ) : null}
           </div>
         ) : null}
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Permit Register — Hot Work &amp; Lifting</CardTitle>
+          <CardTitle>Permit Register — Hot Work, Lifting &amp; Hazardous Work</CardTitle>
         </CardHeader>
 
         <CardBody className="p-0">

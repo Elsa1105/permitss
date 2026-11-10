@@ -81,14 +81,27 @@ export const CRANE_CHECKLIST = [
 
 export type CraneChecklistKey = (typeof CRANE_CHECKLIST)[number]["key"];
 
+/**
+ * Header details printed on the Lifting Permit PDF.
+ * Effective date = ePermit go-live date (NOT the legacy Permit-to-Work date).
+ * Update LIFTING_EFFECTIVE_DATE (DD/MM/YYYY) to the actual launch date,
+ * or set NEXT_PUBLIC_LIFTING_EFFECTIVE_DATE in the environment.
+ */
+/** Printed on the Lifting Permit PDF. Lifting shares the legacy form no. with Hot Work (confirm with MIS). */
+export const LIFTING_FORM_NO = "FOI-SG-057";
+export const LIFTING_FORM_REV = "1";
+export const LIFTING_EFFECTIVE_DATE =
+  process.env.NEXT_PUBLIC_LIFTING_EFFECTIVE_DATE || "01/11/2026";
+
 export type LiftingChecklistKey = (typeof LIFTING_CHECKLIST)[number]["key"];
 export type LiftingChecklistValue = "yes" | "na";
 
-/** Every user, including Admin, needs explicit Lifting qualification. */
+/** Admin passes automatically; every other user needs explicit Lifting qualification. */
 export function hasLiftingQualification(
   user: { role?: string | null; qualified_for?: string[] | null },
   ...allowed: LiftingQualification[]
 ): boolean {
+  if (user.role === "admin") return true;
   const qualified = user.qualified_for ?? [];
   return allowed.some((q) => qualified.includes(q));
 }

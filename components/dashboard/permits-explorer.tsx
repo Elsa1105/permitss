@@ -149,6 +149,7 @@ export function PermitsExplorer({ permits }: PermitsExplorerProps) {
             <option value="all">All Permit Types</option>
             <option value="hot_work_onshore">Hot Work</option>
             <option value="lifting_operation">Lifting</option>
+            <option value="bunkering_operation">Hazardous Work</option>
           </select>
 
           <select

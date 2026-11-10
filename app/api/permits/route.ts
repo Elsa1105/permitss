@@ -7,6 +7,10 @@ import {
   hasLiftingQualification,
   isLiftingPermit,
 } from "@/lib/permits/lifting";
+import {
+  hasBunkeringQualification,
+  isBunkeringPermit,
+} from "@/lib/permits/bunkering";
 
 const ALLOWED_CREATOR_ROLES = new Set([
   "applicant",
@@ -84,6 +88,20 @@ export async function POST(request: Request) {
       {
         error:
           "Only approved Lifting Supervisors can raise a Lifting Permit",
+      },
+      { status: 403 },
+    );
+  }
+
+  // Hazardous Work (bunkering_operation) permits are raised only by approved applicants.
+  if (
+    isBunkeringPermit(payload.permit_type) &&
+    !hasBunkeringQualification(currentUser, "bunkering_applicant")
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Only approved Foremen / Supervisors can raise a Hazardous Work Permit",
       },
       { status: 403 },
     );

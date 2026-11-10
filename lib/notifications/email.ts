@@ -37,6 +37,9 @@ function getTransporter() {
     secure: false, // TLS via STARTTLS on port 587, not implicit TLS on 465
     requireTLS: true,
     auth: { user, pass },
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 20_000,
   });
 
   return cachedTransporter;
@@ -49,7 +52,7 @@ export async function sendEmailNotification(input: SendEmailInput) {
   const recipients = normalizeRecipients(input.to);
 
   if (!enabled) {
-    console.log("[EMAIL DISABLED]", {
+    console.error("[EMAIL DISABLED] ENABLE_EMAIL_NOTIFICATIONS=false - no email was sent", {
       to: recipients,
       subject: input.subject,
     });
@@ -68,7 +71,7 @@ export async function sendEmailNotification(input: SendEmailInput) {
   const transporter = getTransporter();
 
   if (!transporter || !from) {
-    console.log("[EMAIL MOCK - SMTP_USER/SMTP_PASSWORD missing]", {
+    console.error("[EMAIL NOT SENT] SMTP_USER/SMTP_PASSWORD (or EMAIL_FROM) missing in this environment", {
       from,
       to: recipients,
       subject: input.subject,
@@ -95,7 +98,19 @@ export async function sendEmailNotification(input: SendEmailInput) {
 
     return { data: info };
   } catch (error) {
-    console.error("[EMAIL ERROR]", error);
+    const e = error as { code?: string; responseCode?: number; response?: string; message?: string };
+    console.error("[EMAIL ERROR]", {
+      code: e?.code,
+      responseCode: e?.responseCode,
+      response: e?.response,
+      message: e?.message,
+      hint:
+        e?.responseCode === 535 || /5\.7\.139|5\.7\.57|SmtpClientAuthentication/i.test(e?.response ?? e?.message ?? "")
+          ? "Office365 rejected the login: enable SMTP AUTH for this mailbox (Exchange admin: Set-CASMailbox -SmtpClientAuthenticationDisabled $false), check the password/MFA/security defaults."
+          : undefined,
+    });
+    // A failed login must be retried with fresh credentials, not a cached transporter.
+    cachedTransporter = null;
     return { error };
   }
 }
@@ -105,4 +120,38 @@ export async function sendEmailNotification(input: SendEmailInput) {
 // admin retry action) without needing to re-run the whole permit workflow.
 export async function resendEmailNotification(input: SendEmailInput) {
   return sendEmailNotification(input);
+}
+
+/**
+ * Admin diagnostic: reports which SMTP settings are present (never their
+ * values) and whether the SMTP server accepts the login.
+ */
+export async function checkEmailSetup() {
+  const status = {
+    ENABLE_EMAIL_NOTIFICATIONS: process.env.ENABLE_EMAIL_NOTIFICATIONS !== "false",
+    SMTP_HOST: process.env.SMTP_HOST || "smtp.office365.com (default)",
+    SMTP_PORT: process.env.SMTP_PORT || "587 (default)",
+    SMTP_USER_set: Boolean(process.env.SMTP_USER),
+    SMTP_PASSWORD_set: Boolean(process.env.SMTP_PASSWORD),
+    EMAIL_FROM_set: Boolean(process.env.EMAIL_FROM || process.env.SMTP_USER),
+    NEXT_PUBLIC_APP_URL_set: Boolean(process.env.NEXT_PUBLIC_APP_URL),
+  };
+
+  const transporter = getTransporter();
+  if (!transporter) {
+    return { status, login: "skipped: SMTP_USER or SMTP_PASSWORD missing" };
+  }
+
+  try {
+    await transporter.verify();
+    return { status, login: "ok" };
+  } catch (error) {
+    cachedTransporter = null;
+    const e = error as { code?: string; responseCode?: number; response?: string; message?: string };
+    return {
+      status,
+      login: "failed",
+      error: { code: e?.code, responseCode: e?.responseCode, response: e?.response, message: e?.message },
+    };
+  }
 }

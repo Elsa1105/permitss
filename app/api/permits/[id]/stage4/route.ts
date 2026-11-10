@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { notifyPermitEvent } from "@/lib/notifications/permit-emails";
 import { checkLiftingAccess } from "@/lib/permits/lifting-access";
+import { checkBunkeringAccess } from "@/lib/permits/bunkering-access";
 
 export async function POST(
   _request: Request,
@@ -24,6 +25,15 @@ export async function POST(
 
   if (liftingDenied) {
     return NextResponse.json({ error: liftingDenied }, { status: 403 });
+  }
+
+  // Bunkering permits: only the approved Bunkering pool (no-op for others).
+  const bunkeringDenied = await checkBunkeringAccess(supabase, id, auth.user.id, [
+    "bunkering_applicant", "bunkering_srm",
+  ]);
+
+  if (bunkeringDenied) {
+    return NextResponse.json({ error: bunkeringDenied }, { status: 403 });
   }
 
   const { data, error } = await supabase.rpc("permit_submit_stage4", {

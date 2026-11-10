@@ -19,14 +19,17 @@ if (data.user && next && next !== "/login") {
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-100 to-blue-50">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-white text-xl font-bold mb-3">
-            F
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo.png"
+            alt="Franklin Offshore"
+            className="mx-auto mb-3 h-16 w-16 object-contain"
+          />
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
             Franklin Offshore ePermit
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Hot Work Permit (Onshore) — FOI-SG-057
+            Permit-to-Work digital workflow
           </p>
         </div>
         <div className="card p-6">

@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
+import { allFormNosLabel } from "@/lib/permits/forms";
 
 export default async function AppLayout({
   children,
@@ -40,12 +41,9 @@ export default async function AppLayout({
     )
   );
 
-  const formNo =
-    companyCodes.length === 0
-      ? "FOI-SG-057" // fallback aman
-      : companyCodes.includes("CFE")
-      ? "CFE-SG-057"
-      : "FOI-SG-057";
+  const formNo = allFormNosLabel(
+    companyCodes.includes("CFE") ? "CFE" : "FOI",
+  );
 
   return (
     <AppShell user={user} formNo={formNo}>

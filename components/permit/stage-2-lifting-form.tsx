@@ -11,7 +11,17 @@ import { cn } from "@/lib/utils";
  * Lifting Permit Stage II: the assessor / WSH coordinator / WSH officer only
  * records Fit or Not Fit after the physical check (no condition checklist).
  */
-export function Stage2LiftingForm({ permitId }: { permitId: string }) {
+export function Stage2LiftingForm({
+  permitId,
+  workLabel = "lifting",
+}: {
+  permitId: string;
+  /** "lifting" (default) or "hazardous" — used for display wording only. */
+  workLabel?: "lifting" | "hazardous";
+}) {
+  const isHaz = workLabel === "hazardous";
+  const workPhrase = isHaz ? "work" : `${workLabel} work`;
+  const Work = isHaz ? "Work" : "Lifting";
   const router = useRouter();
 
   const [fit, setFit] = React.useState<boolean | null>(null);
@@ -68,7 +78,7 @@ export function Stage2LiftingForm({ permitId }: { permitId: string }) {
         return;
       }
 
-      toast.success(fit ? "Endorsed fit for lifting" : "Marked not fit");
+      toast.success(fit ? `Endorsed fit for ${isHaz ? "work" : workLabel}` : "Marked not fit");
       router.refresh();
     } catch {
       toast.error("Submission failed. Please try again.");
@@ -82,7 +92,7 @@ export function Stage2LiftingForm({ permitId }: { permitId: string }) {
       <p className="text-sm text-slate-700">
         I have conducted a physical check and the application is supported. I
         hereby certify that I have examined the above stated location and that
-        the said location is fit or not fit for the lifting work.
+        the said location is fit or not fit for the {workPhrase}.
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -96,7 +106,7 @@ export function Stage2LiftingForm({ permitId }: { permitId: string }) {
               : "border-slate-300 bg-white hover:bg-slate-50",
           )}
         >
-          Fit for Lifting
+          Fit for {Work}
         </button>
 
         <button
@@ -109,7 +119,7 @@ export function Stage2LiftingForm({ permitId }: { permitId: string }) {
               : "border-slate-300 bg-white hover:bg-slate-50",
           )}
         >
-          Not Fit for Lifting
+          Not Fit for {Work}
         </button>
       </div>
 
@@ -120,7 +130,7 @@ export function Stage2LiftingForm({ permitId }: { permitId: string }) {
         onChange={(e) => setRemarks(e.target.value)}
         placeholder={
           fit === false
-            ? "What conditions need to be addressed before lifting can proceed?"
+            ? `What conditions need to be addressed before ${isHaz ? "work" : workLabel} can proceed?`
             : "Any additional notes…"
         }
       />

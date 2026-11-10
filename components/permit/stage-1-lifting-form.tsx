@@ -32,10 +32,14 @@ export function Stage1LiftingForm({ permitId, currentUser }: Props) {
   const [state, setState] = React.useState<State>({});
   const [submitting, setSubmitting] = React.useState(false);
 
-  const allAnswered = LIFTING_CHECKLIST.every((item) => state[item.key]);
-
+  // Clicking the active choice again clears it (items are optional).
   function setItem(key: LiftingChecklistKey, value: LiftingChecklistValue) {
-    setState((current) => ({ ...current, [key]: value }));
+    setState((current) => {
+      const next = { ...current };
+      if (current[key] === value) delete next[key];
+      else next[key] = value;
+      return next;
+    });
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -44,9 +48,7 @@ export function Stage1LiftingForm({ permitId, currentUser }: Props) {
     const parsed = LiftingStage1Schema.safeParse({ checklist_status: state });
 
     if (!parsed.success) {
-      toast.error(
-        "Every condition must be confirmed, or marked NA if not applicable",
-      );
+      toast.error("Invalid checklist selection");
       return;
     }
 
@@ -83,8 +85,9 @@ export function Stage1LiftingForm({ permitId, currentUser }: Props) {
             I have taken measures to render the area safe and fit for the
             lifting permit application. Further I shall also comply with the
             under-mentioned requirements prior to the commencement and during
-            the duration of the work applied for. Confirm each condition of
-            issue; if not applicable, mark NA.
+            the duration of the work applied for. Tick the conditions of issue
+            that apply to this lifting operation. It is not mandatory to tick
+            every item; mark NA or leave blank where not applicable.
           </p>
         </CardHeader>
 
@@ -150,7 +153,7 @@ export function Stage1LiftingForm({ permitId, currentUser }: Props) {
           >
             Back
           </Button>
-          <Button type="submit" loading={submitting} disabled={!allAnswered}>
+          <Button type="submit" loading={submitting}>
             Submit Stage I
           </Button>
         </CardFooter>

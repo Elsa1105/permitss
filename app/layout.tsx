@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Franklin Offshore ePermit",
-  description: "Hot Work Permit (Onshore) digital workflow — FOI-SG-057",
+  description: "Franklin ePermit — Hot Work, Lifting and Hazardous Work digital workflow",
 };
 
 export const viewport: Viewport = {

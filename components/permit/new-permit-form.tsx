@@ -26,7 +26,7 @@ interface Props {
   companies: CompanyRow[];
   sites: SiteRow[];
   /** Defaults to Hot Work so the existing page keeps working unchanged. */
-  permitType?: "hot_work_onshore" | "lifting_operation";
+  permitType?: "hot_work_onshore" | "lifting_operation" | "bunkering_operation";
 }
 
 type ExtendedNewPermitInput = NewPermitInput & {
@@ -72,7 +72,10 @@ export function NewPermitForm({
   permitType = "hot_work_onshore",
 }: Props) {
   const router = useRouter();
-  const isLifting = permitType === "lifting_operation";
+  const isBunkering = permitType === "bunkering_operation";
+  // Lifting and Bunkering share the simplified form (free-text hazard, fixed job type).
+  const isLifting = permitType === "lifting_operation" || isBunkering;
+  const workName = isBunkering ? "Hazardous Work" : "Lifting";
   const today = React.useMemo(() => todayInSingapore(), []);
 
   const isGuestApplicant =
@@ -87,7 +90,7 @@ export function NewPermitForm({
       currentUser.full_name?.trim() || currentUser.id || "",
     display_applicant_department: currentUser.department ?? "",
     permit_type: permitType,
-    job_type: isLifting ? "Lifting" : "",
+    job_type: isLifting ? workName : "",
 
     vessel_project: "",
     location_of_work: "",
@@ -172,7 +175,7 @@ export function NewPermitForm({
 
     if (permitDays > 14) {
       nextErrors.date_completion =
-        `${isLifting ? "Lifting" : "Hot Work"} Permit validity cannot exceed 14 days for Day 2–14 endorsement flow`;
+        `${isLifting ? workName : "Hot Work"} Permit validity cannot exceed 14 days for Day 2–14 endorsement flow`;
     }
 
     return nextErrors;
@@ -186,7 +189,7 @@ export function NewPermitForm({
     const parsed = NewPermitSchema.safeParse({
       ...form,
       permit_type: permitType,
-      job_type: isLifting ? "Lifting" : form.job_type,
+      job_type: isLifting ? workName : form.job_type,
       hazard_types: isLifting ? ["other"] : form.hazard_types,
       display_applicant_name: form.display_applicant_name.trim(),
       display_applicant_department:
@@ -489,7 +492,7 @@ export function NewPermitForm({
             name="description"
             placeholder={
               isLifting
-                ? "Describe the lifting work (purpose) to be performed (min 10 chars)"
+                ? `Describe the ${workName.toLowerCase()} work (purpose) to be performed (min 10 chars)`
                 : "Describe what hot work will be performed (min 10 chars)"
             }
             value={form.description}
@@ -545,7 +548,11 @@ export function NewPermitForm({
               label="Type of Hazard"
               required
               name="other_hazard_text"
-              placeholder="Free text, e.g. dropped load, swinging load, crushing"
+              placeholder={
+                isBunkering
+                  ? "Free text, e.g. drowning / man overboard, chemical exposure"
+                  : "Free text, e.g. dropped load, swinging load, crushing"
+              }
               value={form.other_hazard_text}
               onChange={(e) => set("other_hazard_text", e.target.value)}
               error={errors.other_hazard_text}

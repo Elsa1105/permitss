@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { HAZARD_TYPES } from "./hazards";
 import { LIFTING_CHECKLIST } from "./lifting";
+import { BUNKERING_CHECKLIST } from "./bunkering";
 
 const HAZARD_VALUES = HAZARD_TYPES.map((h) => h.value) as [
   string,
@@ -42,7 +43,7 @@ export const NewPermitSchema = z
   .object({
     // Defaults to Hot Work so existing callers are unaffected.
     permit_type: z
-      .enum(["hot_work_onshore", "lifting_operation"])
+      .enum(["hot_work_onshore", "lifting_operation", "bunkering_operation"])
       .optional()
       .default("hot_work_onshore"),
 
@@ -140,13 +141,19 @@ export type Stage1Input = z.infer<typeof Stage1Schema>;
 // Lifting Permit
 // ---------------------------------------------------------------------------
 
-const liftingItemSchema = z.enum(["yes", "na"], {
-  errorMap: () => ({
-    message: "Every condition must be confirmed or marked NA",
-  }),
-});
+const liftingItemSchema = z
+  .enum(["yes", "na"], {
+    errorMap: () => ({
+      message: "Invalid checklist value",
+    }),
+  })
+  .optional();
 
-/** Stage I: all conditions of issue confirmed ("yes") or marked "na". */
+/**
+ * Stage I: conditions of issue are confirmed ("yes"), marked "na", or left
+ * unticked. Not every item applies to every lifting operation, so applicants
+ * are NOT required to tick all 14 items.
+ */
 export const LiftingStage1Schema = z.object({
   checklist_status: z.object(
     Object.fromEntries(
@@ -156,6 +163,20 @@ export const LiftingStage1Schema = z.object({
 });
 
 export type LiftingStage1Input = z.infer<typeof LiftingStage1Schema>;
+
+/** Bunkering Stage I: same optional tick-box behaviour as Lifting. */
+export const BunkeringStage1Schema = z.object({
+  checklist_status: z.object(
+    Object.fromEntries(
+      BUNKERING_CHECKLIST.map((item) => [item.key, liftingItemSchema]),
+    ),
+  ),
+  // "Others ____" under Type of Work, and the free "Precautions" line.
+  others_text: z.string().trim().max(200).optional(),
+  precaution_other: z.string().trim().max(200).optional(),
+});
+
+export type BunkeringStage1Input = z.infer<typeof BunkeringStage1Schema>;
 
 /** Stage II: Fit / Not Fit only (no condition checklist, unlike Hot Work). */
 export const LiftingStage2Schema = z

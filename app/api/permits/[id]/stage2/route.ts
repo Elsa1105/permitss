@@ -3,6 +3,8 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { LiftingStage2Schema, Stage2Schema } from "@/lib/permits/schemas";
 import { isLiftingPermit } from "@/lib/permits/lifting";
 import { checkLiftingAccess } from "@/lib/permits/lifting-access";
+import { isBunkeringPermit } from "@/lib/permits/bunkering";
+import { checkBunkeringAccess } from "@/lib/permits/bunkering-access";
 import { notifyPermitEvent } from "@/lib/notifications/permit-emails";
 
 export async function POST(
@@ -28,11 +30,18 @@ export async function POST(
     .eq("id", id)
     .maybeSingle();
 
-  if (isLiftingPermit(typeRow?.permit_type)) {
-    const denied = await checkLiftingAccess(supabase, id, auth.user.id, [
-      "lifting_assessor",
-      "lifting_srm",
-    ]);
+  const isBunkering = isBunkeringPermit(typeRow?.permit_type);
+
+  if (isLiftingPermit(typeRow?.permit_type) || isBunkering) {
+    const denied = isBunkering
+      ? await checkBunkeringAccess(supabase, id, auth.user.id, [
+          "bunkering_assessor",
+          "bunkering_srm",
+        ])
+      : await checkLiftingAccess(supabase, id, auth.user.id, [
+          "lifting_assessor",
+          "lifting_srm",
+        ]);
 
     if (denied) {
       return NextResponse.json({ error: denied }, { status: 403 });

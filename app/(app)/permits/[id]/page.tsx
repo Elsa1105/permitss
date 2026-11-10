@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formNoForPermitType } from "@/lib/permits/forms";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
 import { requireUser } from "@/lib/auth/session";
@@ -154,6 +155,9 @@ export default async function PermitDetailPage({
             <h1 className="text-2xl font-semibold tracking-tight">
               {permit.serial_no}
             </h1>
+            <p className="text-xs text-slate-500">
+              Form No. {formNoForPermitType(permit.permit_type)}
+            </p>
 
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <PermitStatusBadge

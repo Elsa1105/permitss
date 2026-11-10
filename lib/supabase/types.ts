@@ -62,7 +62,10 @@ export type Qualification =
   | "hot_work_srm"
   | "lifting_applicant"
   | "lifting_assessor"
-  | "lifting_srm";
+  | "lifting_srm"
+  | "bunkering_applicant"
+  | "bunkering_assessor"
+  | "bunkering_srm";
 
 export interface UserRow {
   id: string;

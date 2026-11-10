@@ -15,6 +15,7 @@ import { Stage2Form } from "./stage-2-form";
 import { Stage3Form } from "./stage-3-form";
 import { Stage4Form } from "./stage-4-form";
 import { Stage1LiftingForm } from "./stage-1-lifting-form";
+import { Stage1BunkeringForm } from "./stage-1-bunkering-form";
 import { Stage2LiftingForm } from "./stage-2-lifting-form";
 import {
   CRANE_CHECKLIST,
@@ -23,6 +24,13 @@ import {
   isLiftingPermit,
   type LiftingQualification,
 } from "@/lib/permits/lifting";
+import {
+  BUNKERING_PRECAUTIONS,
+  BUNKERING_TYPE_OF_WORK,
+  hasBunkeringQualification,
+  isBunkeringPermit,
+  type BunkeringQualification,
+} from "@/lib/permits/bunkering";
 import { EndorsementForm } from "./endorsement-form";
 import { PhotoUploader } from "./photo-uploader";
 import { DocumentUploader } from "./document-uploader";
@@ -94,8 +102,21 @@ export function PermitDetail({
   // Lifting permits use a separate pool of users (qualified_for lifting_*).
   // For any other permit type hasLift() is always true, so Hot Work is unchanged.
   const isLifting = isLiftingPermit(permit.permit_type);
-  const hasLift = (...allowed: LiftingQualification[]) =>
-    !isLifting || hasLiftingQualification(currentUser, ...allowed);
+  // Bunkering uses its own pool (bunkering_*) with the same stage flow as Lifting.
+  const isBunkering = isBunkeringPermit(permit.permit_type);
+  // Lifting + Bunkering: named-applicant Stage I, free-text hazard, Fit/Not-Fit Stage II.
+  const isFreeForm = isLifting || isBunkering;
+  const hasLift = (...allowed: LiftingQualification[]) => {
+    if (isBunkering) {
+      return hasBunkeringQualification(
+        currentUser,
+        ...(allowed.map((q) =>
+          q.replace("lifting_", "bunkering_"),
+        ) as BunkeringQualification[]),
+      );
+    }
+    return !isLifting || hasLiftingQualification(currentUser, ...allowed);
+  };
 
   const isApplicant = currentUser.id === permit.applicant_id;
 
@@ -115,8 +136,8 @@ export function PermitDetail({
 
   const showStage1Form =
     !hasStage1 &&
-    (isLifting ? isApplicant : (isApplicant || isSrmOverride)) &&
-    (isLifting ? hasLift("lifting_applicant") : (isApplicant ? hasLift("lifting_applicant") : hasLift("lifting_srm"))) &&
+    (isFreeForm ? isApplicant : (isApplicant || isSrmOverride)) &&
+    (isFreeForm ? hasLift("lifting_applicant") : (isApplicant ? hasLift("lifting_applicant") : hasLift("lifting_srm"))) &&
     canPerform(permit.state, "submit_stage1");
 
   const showStage1Override = !isApplicant && isSrmOverride && showStage1Form;
@@ -180,7 +201,7 @@ export function PermitDetail({
     p.display_applicant_department || permit.applicant?.department || "—";
 
   // Lifting form: "Type of Hazard" is free text (stored in other_hazard_text).
-  const hazardText = isLifting
+  const hazardText = isFreeForm
     ? (p.other_hazard_text ?? "—")
     : formatHazards(permit.hazard_types, p.other_hazard_text ?? null);
 
@@ -222,12 +243,12 @@ export function PermitDetail({
 
           <Field label="Job Type" value={p.job_type} />
           <Field
-            label={isLifting ? "Vessel / Premises" : "Vessel / Project"}
+            label={isFreeForm ? "Vessel / Premises" : "Vessel / Project"}
             value={permit.vessel_project}
           />
           <Field label="Location of Work" value={permit.location_of_work} />
           <Field
-            label={isLifting ? "Type of Hazard" : "Hazard Types"}
+            label={isFreeForm ? "Type of Hazard" : "Hazard Types"}
             value={hazardText}
           />
 
@@ -324,9 +345,11 @@ export function PermitDetail({
 
       <StageCard
         title={
-          isLifting
-            ? "Stage I — Raising of Permit by Lifting Supervisor"
-            : "Stage I — Raising of Permit"
+          isBunkering
+            ? "Stage I — Raising of Hazardous Work Permit by Foreman or Supervisor"
+            : isLifting
+              ? "Stage I — Raising of Permit by Lifting Supervisor"
+              : "Stage I — Raising of Permit"
         }
         meta={
           stage1
@@ -343,6 +366,16 @@ export function PermitDetail({
             data={
               stage1.data as {
                 checklist_status?: Record<string, string>;
+                others_text?: string;
+                precaution_other?: string;
+              }
+            }
+          />
+        ) : stage1 && isBunkering ? (
+          <BunkeringChecklistDisplay
+            data={
+              stage1.data as {
+                checklist_status?: Record<string, string>;
               }
             }
           />
@@ -354,7 +387,15 @@ export function PermitDetail({
               <OverrideNotice role={role} stage="I" />
             ) : null}
 
-            {isLifting ? (
+            {isBunkering ? (
+              <Stage1BunkeringForm
+                permitId={permit.id}
+                currentUser={{
+                  full_name: currentUser.full_name,
+                  department: currentUser.department,
+                }}
+              />
+            ) : isLifting ? (
               <Stage1LiftingForm
                 permitId={permit.id}
                 currentUser={{
@@ -379,7 +420,7 @@ export function PermitDetail({
 
       <StageCard
         title={
-          isLifting
+          isFreeForm
             ? "Stage II — Endorsement by Assessor / WSH Coordinator / WSH Officer"
             : "Stage II — Endorsement by Safety Assessor"
         }
@@ -395,8 +436,9 @@ export function PermitDetail({
             : null
         }
       >
-        {stage2 && isLifting ? (
+        {stage2 && isFreeForm ? (
           <LiftingStage2Display
+            workLabel={isBunkering ? "Work" : "Lifting"}
             data={
               stage2.data as {
                 fit: boolean;
@@ -423,8 +465,11 @@ export function PermitDetail({
               <OverrideNotice role={role} stage="II" />
             ) : null}
 
-            {isLifting ? (
-              <Stage2LiftingForm permitId={permit.id} />
+            {isFreeForm ? (
+              <Stage2LiftingForm
+                permitId={permit.id}
+                workLabel={isBunkering ? "hazardous" : "lifting"}
+              />
             ) : (
               <Stage2Form permitId={permit.id} />
             )}
@@ -474,7 +519,7 @@ export function PermitDetail({
             data={stage3.data as { decision: string; reason?: string }}
           />
         ) : showStage3Form ? (
-          <Stage3Form permitId={permit.id} isLifting={isLifting} />
+          <Stage3Form permitId={permit.id} isLifting={isLifting} isBunkering={isBunkering} />
         ) : (
           <PendingNotice
             msg={
@@ -579,11 +624,13 @@ function Field({
   value?: string | null;
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       <div className="text-xs uppercase tracking-wide text-slate-500">
         {label}
       </div>
-      <div className="mt-0.5 font-medium text-slate-900">{value || "—"}</div>
+      <div className="mt-0.5 font-medium text-slate-900 break-words [overflow-wrap:anywhere]">
+        {value || "—"}
+      </div>
     </div>
   );
 }
@@ -716,6 +763,49 @@ function Stage2Display({
   );
 }
 
+function BunkeringChecklistDisplay({
+  data,
+}: {
+  data: {
+    checklist_status?: Record<string, string>;
+    others_text?: string;
+    precaution_other?: string;
+  };
+}) {
+  const row = (key: string, label: string, ticked: boolean) => (
+    <li key={key} className="flex items-start gap-2">
+      <StatusPill status={ticked ? "yes" : "unset"} />
+      <span>{label}</span>
+    </li>
+  );
+  const tick = (key: string) => data.checklist_status?.[key] === "yes";
+
+  return (
+    <div className="space-y-3 text-sm">
+      <div>
+        <div className="mb-1 font-semibold">Type of Work</div>
+        <ul className="space-y-1.5">
+          {BUNKERING_TYPE_OF_WORK.map((i) => row(i.key, i.label, tick(i.key)))}
+          {row(
+            "others",
+            `Others${data.others_text ? `: ${data.others_text}` : ""}`,
+            !!data.others_text,
+          )}
+        </ul>
+      </div>
+      <div>
+        <div className="mb-1 font-semibold">Precautions</div>
+        <ul className="space-y-1.5">
+          {BUNKERING_PRECAUTIONS.map((i) => row(i.key, i.label, tick(i.key)))}
+          {data.precaution_other
+            ? row("precaution_other", data.precaution_other, true)
+            : null}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function LiftingChecklistDisplay({
   data,
 }: {
@@ -761,7 +851,9 @@ function LiftingChecklistDisplay({
 
 function LiftingStage2Display({
   data,
+  workLabel = "Lifting",
 }: {
+  workLabel?: string;
   data: {
     fit: boolean;
     remarks?: string;
@@ -772,7 +864,7 @@ function LiftingStage2Display({
   return (
     <div className="space-y-3">
       <Badge tone={data.fit ? "ok" : "bad"}>
-        {data.fit ? "Fit for Lifting" : "Not Fit for Lifting"}
+        {data.fit ? `Fit for ${workLabel}` : `Not Fit for ${workLabel}`}
       </Badge>
 
       {data.remarks ? (

@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { LiftingStage1Schema, Stage1Schema } from "@/lib/permits/schemas";
+import {
+  BunkeringStage1Schema,
+  LiftingStage1Schema,
+  Stage1Schema,
+} from "@/lib/permits/schemas";
+import {
+  hasBunkeringQualification,
+  isBunkeringPermit,
+} from "@/lib/permits/bunkering";
 import {
   hasLiftingQualification,
   isLiftingPermit,
@@ -95,6 +103,70 @@ export async function POST(
     });
 
     return NextResponse.json(liftingData);
+  }
+
+  // ── Hazardous Work Permit: own checklist + own user pool.
+  if (isBunkeringPermit(typeRow?.permit_type)) {
+    const bunkeringParsed = BunkeringStage1Schema.safeParse(body);
+
+    if (!bunkeringParsed.success) {
+      return NextResponse.json(
+        {
+          error:
+            bunkeringParsed.error.issues[0]?.message ?? "Validation failed",
+        },
+        { status: 400 },
+      );
+    }
+
+    const { data: bunkeringUser } = await supabase
+      .from("users")
+      .select("role, active, qualified_for")
+      .eq("id", auth.user.id)
+      .maybeSingle();
+
+    if (!bunkeringUser || !bunkeringUser.active) {
+      return NextResponse.json(
+        { error: "User account is inactive" },
+        { status: 403 },
+      );
+    }
+
+    if (
+      typeRow?.applicant_id !== auth.user.id ||
+      !hasBunkeringQualification(bunkeringUser, "bunkering_applicant")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Only the named applicant with Hazardous Work applicant qualification can submit Stage I. Delegated Stage I submission is not permitted.",
+        },
+        { status: 403 },
+      );
+    }
+
+    const { data: bunkeringData, error: bunkeringError } = await supabase.rpc(
+      "permit_submit_stage1",
+      {
+        p_permit_id: id,
+        p_stage_data: { form: "bunkering", ...bunkeringParsed.data },
+      },
+    );
+
+    if (bunkeringError) {
+      return NextResponse.json(
+        { error: bunkeringError.message },
+        { status: 400 },
+      );
+    }
+
+    await notifyPermitEvent({
+      supabase,
+      permitId: id,
+      event: "stage1_submitted",
+    });
+
+    return NextResponse.json(bunkeringData);
   }
 
   const parsed = Stage1Schema.safeParse(body);

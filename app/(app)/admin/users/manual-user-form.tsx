@@ -23,6 +23,9 @@ const QUALIFICATION_OPTIONS = [
   { value: "lifting_applicant", label: "Lifting Applicant (Lifting Supervisor)" },
   { value: "lifting_assessor", label: "Lifting Assessor / WSH" },
   { value: "lifting_srm", label: "Lifting SRM / PM" },
+  { value: "bunkering_applicant", label: "Hazardous Work Applicant (Foreman / Supervisor)" },
+  { value: "bunkering_assessor", label: "Hazardous Work Assessor / WSH" },
+  { value: "bunkering_srm", label: "Hazardous Work SRM / PM" },
 ];
 
 interface Props {

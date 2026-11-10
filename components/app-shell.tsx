@@ -40,6 +40,12 @@ const NAV: NavItem[] = [
   icon: FilePlus,
   roles: ["applicant", "guest_applicant", "contractor", "srm", "admin"],
   },
+  {
+  href: "/permits/new/bunkering",
+  label: "New Hazardous Work Permit",
+  icon: FilePlus,
+  roles: ["applicant", "guest_applicant", "contractor", "srm", "admin"],
+  },
   { href: "/admin/users",   label: "Users",     icon: Users,        roles: ["admin"] },
   { href: "/admin/audit",   label: "Audit Log", icon: Shield,       roles: ["admin"] },
 ];
@@ -61,6 +67,7 @@ export function AppShell({
   const visibleNav = NAV.filter((n) => {
     if (n.href === "/permits/new") return canCreatePermitType(user, "hot_work_onshore");
     if (n.href === "/permits/new/lifting") return canCreatePermitType(user, "lifting_operation");
+    if (n.href === "/permits/new/bunkering") return canCreatePermitType(user, "bunkering_operation");
     return !n.roles || n.roles.includes(user.role) || user.role === "admin";
   });
 
@@ -157,9 +164,12 @@ function SidebarContent({
     <>
       <div className="p-4 border-b border-slate-200">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center">
-            F
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo.png"
+            alt="Franklin Offshore"
+            className="h-9 w-9 object-contain"
+          />
           <div>
             <div className="font-semibold text-sm leading-tight">Franklin ePermit</div>
             <div className="text-xs text-slate-500">{formNo}</div>

@@ -25,6 +25,9 @@ const QUALIFICATION_OPTIONS = [
   "lifting_applicant",
   "lifting_assessor",
   "lifting_srm",
+  "bunkering_applicant",
+  "bunkering_assessor",
+  "bunkering_srm",
 ];
 
 export function UsersTable({

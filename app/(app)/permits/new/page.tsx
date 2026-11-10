@@ -7,6 +7,7 @@ import {
   PERMIT_TYPE_HOT_WORK,
   PERMIT_TYPE_LIFTING,
 } from "@/lib/permits/lifting";
+import { PERMIT_TYPE_BUNKERING } from "@/lib/permits/bunkering";
 
 export default async function NewPermitPage({
   searchParams,
@@ -18,9 +19,15 @@ export default async function NewPermitPage({
 
   // /permits/new            -> Hot Work (unchanged)
   // /permits/new?type=lifting -> Lifting Permit
+  // /permits/new?type=bunkering -> Hazardous Work Permit
   const permitType =
-    type === "lifting" ? PERMIT_TYPE_LIFTING : PERMIT_TYPE_HOT_WORK;
+    type === "lifting"
+      ? PERMIT_TYPE_LIFTING
+      : type === "bunkering"
+        ? PERMIT_TYPE_BUNKERING
+        : PERMIT_TYPE_HOT_WORK;
   const isLifting = permitType === PERMIT_TYPE_LIFTING;
+  const isBunkering = permitType === PERMIT_TYPE_BUNKERING;
 
   const allowedRoles = [
     "applicant",
@@ -40,10 +47,16 @@ export default async function NewPermitPage({
     <div className="max-w-3xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">
-          {isLifting ? "New Lifting Permit" : "New Hot Work Permit"}
+          {isBunkering
+            ? "New Hazardous Work Permit"
+            : isLifting
+              ? "New Lifting Permit"
+              : "New Hot Work Permit"}
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          {isLifting
+          {isBunkering
+            ? "Complete the details to create a new Hazardous Work Permit (Onshore). The Foreman / Supervisor completes Stage I, then the Safety Assessor and Ship-Repair Manager follow."
+            : isLifting
             ? "Complete the lifting operation details to create a new Lifting Permit. A qualified Lifting Supervisor must complete Stage I before the permit can proceed."
             : "Complete the work details to create a new Hot Work Permit."}
         </p>

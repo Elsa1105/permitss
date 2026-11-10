@@ -10,12 +10,15 @@ export default async function PermitAccessDeniedPage({
   await requireUser();
   const { reason } = await searchParams;
   const isLifting = reason === "lifting";
+  const isBunkering = reason === "bunkering";
   return (
     <div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6">
       <ShieldAlert className="mb-3 h-8 w-8 text-amber-700" />
       <h1 className="text-xl font-semibold text-slate-900">Permission required</h1>
       <p className="mt-2 text-sm text-slate-700">
-        {isLifting
+        {isBunkering
+          ? "Creating a Hazardous Work Permit requires the Hazardous Work Applicant (Foreman / Supervisor) qualification. Please contact your administrator to verify your qualifications and site access."
+          : isLifting
           ? "Creating a Lifting Permit requires the Lifting Applicant (Lifting Supervisor) qualification. Please contact your administrator to verify your qualifications and site access."
           : "Your account role does not allow you to create a permit. Contact your administrator if you believe this is incorrect."}
       </p>

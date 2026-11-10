@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { BUNKERING_STAGE_III_WORDING } from "@/lib/permits/bunkering";
 import {
   REJECT_DEFINITION,
   REVOKE_DEFINITION,
@@ -19,7 +20,15 @@ const STAGE_III_SIMOPS_WORDING =
 const LIFTING_STAGE_III_WORDING =
   "I have evaluated the hazards and risks associated with the lifting operation and confirm that the work area and its surroundings have been inspected and assessed for safe execution.";
 
-export function Stage3Form({ permitId, isLifting = false }: { permitId: string; isLifting?: boolean }) {
+export function Stage3Form({
+  permitId,
+  isLifting = false,
+  isBunkering = false,
+}: {
+  permitId: string;
+  isLifting?: boolean;
+  isBunkering?: boolean;
+}) {
   const router = useRouter();
   const [decision, setDecision] = React.useState<Decision | null>(null);
   const [reason, setReason] = React.useState("");
@@ -76,7 +85,11 @@ export function Stage3Form({ permitId, isLifting = false }: { permitId: string; 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <p className="text-sm text-slate-700">
-        {isLifting ? LIFTING_STAGE_III_WORDING : STAGE_III_SIMOPS_WORDING}
+        {isBunkering
+          ? BUNKERING_STAGE_III_WORDING
+          : isLifting
+            ? LIFTING_STAGE_III_WORDING
+            : STAGE_III_SIMOPS_WORDING}
       </p>
 
       <div className="grid grid-cols-2 gap-3">

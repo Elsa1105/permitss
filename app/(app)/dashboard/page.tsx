@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { listPermits } from "@/lib/permits/queries";
 import { hasLiftingQualification } from "@/lib/permits/lifting";
+import { hasBunkeringQualification } from "@/lib/permits/bunkering";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty";
@@ -96,6 +97,7 @@ export default async function DashboardPage() {
 
   const canCreatePermit = PERMIT_CREATOR_ROLES.has(user.role);
   const canCreateLifting = canCreatePermit && (user.role === "admin" || hasLiftingQualification(user, "lifting_applicant"));
+  const canCreateBunkering = canCreatePermit && (user.role === "admin" || hasBunkeringQualification(user, "bunkering_applicant"));
   const showRecentActivity = !APPLICANT_QUEUE_ROLES.has(user.role);
 
   return (
@@ -118,6 +120,11 @@ export default async function DashboardPage() {
             {canCreateLifting ? (
               <Link href="/permits/new/lifting">
                 <Button size="lg" variant="secondary"><FilePlus className="h-5 w-5" /> New Lifting Permit</Button>
+              </Link>
+            ) : null}
+            {canCreateBunkering ? (
+              <Link href="/permits/new/bunkering">
+                <Button size="lg" variant="secondary"><FilePlus className="h-5 w-5" /> New Hazardous Work Permit</Button>
               </Link>
             ) : null}
           </div>

@@ -5,8 +5,10 @@ import {
   StandardFonts,
   rgb,
   type PDFFont,
+  type PDFImage,
   type PDFPage,
 } from "pdf-lib";
+import { LOGO_PNG_BASE64 } from "./logo-data";
 import type {
   PermitDocumentRow,
   PermitEndorsementRow,
@@ -14,7 +16,24 @@ import type {
   PermitStageRow,
   PermitWithJoins,
 } from "@/lib/supabase/types";
-import { LIFTING_CHECKLIST, isLiftingPermit } from "@/lib/permits/lifting";
+import {
+  BUNKERING_EFFECTIVE_DATE,
+  BUNKERING_FORM_NO,
+  BUNKERING_FORM_REV,
+  BUNKERING_FORM_TITLE,
+  BUNKERING_STAGE_I_DECLARATION,
+  BUNKERING_STAGE_III_WORDING,
+  BUNKERING_PRECAUTIONS,
+  BUNKERING_TYPE_OF_WORK,
+  isBunkeringPermit,
+} from "@/lib/permits/bunkering";
+import {
+  LIFTING_CHECKLIST,
+  LIFTING_EFFECTIVE_DATE,
+  LIFTING_FORM_NO,
+  LIFTING_FORM_REV,
+  isLiftingPermit,
+} from "@/lib/permits/lifting";
 
 export interface PdfBundle {
   permit: PermitWithJoins;
@@ -49,6 +68,7 @@ const COLOR = {
 };
 
 interface DrawCtx {
+  logo?: PDFImage;
   page: PDFPage;
   font: PDFFont;
   fontBold: PDFFont;
@@ -197,7 +217,14 @@ export async function generatePermitPdf(bundle: PdfBundle): Promise<Uint8Array> 
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
 
   const page = doc.addPage([A4.w, A4.h]);
-  const ctx: DrawCtx = { page, font, fontBold, y: MARGIN };
+  let logo: PDFImage | undefined;
+  try {
+    logo = await doc.embedPng(Buffer.from(LOGO_PNG_BASE64, "base64"));
+  } catch {
+    logo = undefined; // fall back to the plain "F" mark
+  }
+
+  const ctx: DrawCtx = { logo, page, font, fontBold, y: MARGIN };
 
   const contentW = A4.w - 2 * MARGIN;
   const leftW = contentW - RIGHT_PANEL_W - 10;
@@ -205,9 +232,24 @@ export async function generatePermitPdf(bundle: PdfBundle): Promise<Uint8Array> 
   drawHeader(
     ctx,
     contentW,
-    isLiftingPermit(bundle.permit.permit_type)
-      ? "Application for Lifting Permit"
-      : "Hot Work Permit (Onshore)",
+    isBunkeringPermit(bundle.permit.permit_type)
+      ? BUNKERING_FORM_TITLE
+      : isLiftingPermit(bundle.permit.permit_type)
+        ? "Application for Lifting Permit"
+        : "Hot Work Permit (Onshore)",
+    isBunkeringPermit(bundle.permit.permit_type)
+      ? {
+          rev: BUNKERING_FORM_REV,
+          effective: BUNKERING_EFFECTIVE_DATE,
+          formNo: BUNKERING_FORM_NO,
+        }
+      : isLiftingPermit(bundle.permit.permit_type)
+        ? {
+            rev: LIFTING_FORM_REV,
+            effective: LIFTING_EFFECTIVE_DATE,
+            formNo: LIFTING_FORM_NO,
+          }
+        : undefined,
   );
   ctx.y += 6;
 
@@ -248,11 +290,15 @@ export async function generatePermitPdf(bundle: PdfBundle): Promise<Uint8Array> 
   drawDocuments(ctx, bundle.documents, leftW);
   ctx.y += 5;
 
-  const lifting = isLiftingPermit(bundle.permit.permit_type);
+  const bunkering = isBunkeringPermit(bundle.permit.permit_type);
+  // Lifting and Bunkering share the same stage layout / wording pattern.
+  const lifting = isLiftingPermit(bundle.permit.permit_type) || bunkering;
 
   band(
     ctx,
-    lifting
+    bunkering
+      ? "STAGE I : RAISING OF HAZARDOUS WORK PERMIT BY FOREMAN OR SUPERVISOR"
+      : lifting
       ? "STAGE I : RAISING OF PERMIT-TO-WORK BY LIFTING SUPERVISOR"
       : "STAGE I : RAISING OF PERMIT-TO-WORK BY FOREMAN OR SUPERVISOR",
     leftW,
@@ -262,7 +308,7 @@ export async function generatePermitPdf(bundle: PdfBundle): Promise<Uint8Array> 
 
   band(
     ctx,
-    lifting
+    lifting && !bunkering
       ? "STAGE II : ENDORSEMENT BY ASSESSOR / WSH COORDINATOR / WSH OFFICER"
       : "STAGE II : ENDORSEMENT BY SAFETY ASSESSOR",
     leftW,
@@ -272,7 +318,9 @@ export async function generatePermitPdf(bundle: PdfBundle): Promise<Uint8Array> 
 
   band(
     ctx,
-    "STAGE III : APPROVED BY SHIP REPAIR-MANAGER / PROJECT MANAGER",
+    bunkering
+      ? "STAGE III : APPROVAL BY THE SHIP-REPAIR MANAGER"
+      : "STAGE III : APPROVED BY SHIP REPAIR-MANAGER / PROJECT MANAGER",
     leftW,
   );
   drawStage3(ctx, bundle, leftW);
@@ -280,7 +328,9 @@ export async function generatePermitPdf(bundle: PdfBundle): Promise<Uint8Array> 
 
   band(
     ctx,
-    lifting
+    bunkering
+      ? "STAGE IV : NOTIFICATION OF COMPLETION OF HAZARDOUS WORK"
+      : lifting
       ? "STAGE IV : NOTIFICATION OF COMPLETION OF WORK"
       : "STAGE IV : NOTIFICATION OF COMPLETION OF HOT WORK",
     leftW,
@@ -299,6 +349,14 @@ export async function generatePermitPdf(bundle: PdfBundle): Promise<Uint8Array> 
 }
 
 function formatHazardsForPdf(permit: PermitExtra) {
+  // Lifting and Hazardous Work: "Type of Hazard" is a single free-text field.
+  if (
+    isLiftingPermit(permit.permit_type) ||
+    isBunkeringPermit(permit.permit_type)
+  ) {
+    return permit.other_hazard_text?.trim() || "—";
+  }
+
   return permit.hazard_types
     .map((hazard) => {
       if (hazard === "other" && permit.other_hazard_text) {
@@ -573,31 +631,54 @@ function drawHeader(
   ctx: DrawCtx,
   w: number,
   title = "Hot Work Permit (Onshore)",
+  meta: { rev: string; effective: string; formNo?: string } = {
+    rev: "0",
+    effective: "04/02/2013",
+  },
 ) {
   const h = 58;
 
   box(ctx.page, MARGIN, ctx.y, 58, h, rgb(1, 1, 1));
 
-  ctx.page.drawCircle({
-    x: MARGIN + 29,
-    y: A4.h - ctx.y - 29,
-    size: 17,
-    color: COLOR.band,
-    borderColor: COLOR.bandText,
-    borderWidth: 0.7,
-  });
+  if (ctx.logo) {
+    const logoW = 42;
+    const logoH = (logoW * ctx.logo.height) / ctx.logo.width;
 
-  text(ctx.page, "F", MARGIN + 24, ctx.y + 18, {
-    font: ctx.fontBold,
-    size: 20,
-    color: COLOR.bandText,
-  });
+    ctx.page.drawImage(ctx.logo, {
+      x: MARGIN + (58 - logoW) / 2,
+      y: A4.h - ctx.y - (h + logoH) / 2,
+      width: logoW,
+      height: logoH,
+    });
+  } else {
+    ctx.page.drawCircle({
+      x: MARGIN + 29,
+      y: A4.h - ctx.y - 29,
+      size: 17,
+      color: COLOR.band,
+      borderColor: COLOR.bandText,
+      borderWidth: 0.7,
+    });
+
+    text(ctx.page, "F", MARGIN + 24, ctx.y + 18, {
+      font: ctx.fontBold,
+      size: 20,
+      color: COLOR.bandText,
+    });
+  }
 
   box(ctx.page, MARGIN + 58, ctx.y, w - 58 - 218, h, rgb(1, 1, 1));
 
-  text(ctx.page, "FRANKLIN OFFSHORE INTERNATIONAL PTE LTD", MARGIN + 68, ctx.y + 7, {
+  // Shrink the company name if needed so it never runs under the Form No. box.
+  const nameBoxW = w - 58 - 218 - 16;
+  const companyName = "FRANKLIN OFFSHORE INTERNATIONAL PTE LTD";
+  const nameSize = Math.min(
+    10.7,
+    (nameBoxW / ctx.fontBold.widthOfTextAtSize(companyName, 10.7)) * 10.7,
+  );
+  text(ctx.page, companyName, MARGIN + 68, ctx.y + 7, {
     font: ctx.fontBold,
-    size: 10.7,
+    size: nameSize,
   });
 
   text(ctx.page, "Title:", MARGIN + 68, ctx.y + 30, {
@@ -620,9 +701,9 @@ function drawHeader(
   const rw = 218;
 
   box(ctx.page, rx, ctx.y, rw, h, rgb(1, 1, 1));
-  drawMetaRow(ctx, rx, ctx.y, rw, "Form No.:", "FOI-SG-057");
-  drawMetaRow(ctx, rx, ctx.y + 19.3, rw, "Rev.:", "0");
-  drawMetaRow(ctx, rx, ctx.y + 38.6, rw, "Effective Date:", "04/02/2013");
+  drawMetaRow(ctx, rx, ctx.y, rw, "Form No.:", meta.formNo ?? "FOI-SG-057");
+  drawMetaRow(ctx, rx, ctx.y + 19.3, rw, "Rev.:", meta.rev);
+  drawMetaRow(ctx, rx, ctx.y + 38.6, rw, "Effective Date:", meta.effective);
 
   ctx.y += h;
 }
@@ -783,6 +864,11 @@ function drawDayPanel(
 function drawStage1(ctx: DrawCtx, b: PdfBundle, w: number) {
   const stage = b.stages.find((s) => s.stage === "I");
 
+  if (isBunkeringPermit(b.permit.permit_type)) {
+    drawHazardousStage1(ctx, b, w);
+    return;
+  }
+
   if (isLiftingPermit(b.permit.permit_type)) {
     drawLiftingStage1(ctx, b, w);
     return;
@@ -818,14 +904,21 @@ function drawStage1(ctx: DrawCtx, b: PdfBundle, w: number) {
   });
 }
 
-function drawLiftingStage1(ctx: DrawCtx, b: PdfBundle, w: number) {
+/** Shared Stage I checklist layout for Lifting (default) and Bunkering. */
+function drawLiftingStage1(
+  ctx: DrawCtx,
+  b: PdfBundle,
+  w: number,
+  items: readonly { key: string; label: string }[] = LIFTING_CHECKLIST,
+  workName: string = "lifting",
+) {
   const stage = b.stages.find((s) => s.stage === "I");
   const status =
     (stage?.data as { checklist_status?: Record<string, string> })
       ?.checklist_status ?? {};
 
   const declaration =
-    "I have taken measures to render the area safe and fit for the lifting permit application. I shall comply with the following requirements prior to the commencement and during the duration of the work applied for. Conditions of issue must be confirmed; if not applicable, NA is indicated.";
+    `I have taken measures to render the area safe and fit for the ${workName} permit application. I shall comply with the following requirements prior to the commencement and during the duration of the work applied for. Applicable conditions of issue are ticked; items that do not apply may be left blank or marked NA.`;
 
   for (const lineText of wrap(declaration, ctx.font, 8.3, w - 12)) {
     text(ctx.page, lineText, MARGIN + 7, ctx.y, {
@@ -838,24 +931,120 @@ function drawLiftingStage1(ctx: DrawCtx, b: PdfBundle, w: number) {
   ctx.y += 3;
 
   const leftX = MARGIN + 7;
-  const rightX = MARGIN + 7 + (w - 14) / 2;
-  const half = Math.ceil(LIFTING_CHECKLIST.length / 2);
+  const colW = (w - 14) / 2;
+  const rightX = leftX + colW;
+  const half = Math.ceil(items.length / 2);
+
+  const label = (item: { key: string; label: string }) =>
+    status[item.key] === "na" ? `${item.label} (NA)` : item.label;
 
   for (let i = 0; i < half; i++) {
-    const left = LIFTING_CHECKLIST[i];
-    const right = LIFTING_CHECKLIST[i + half];
+    const left = items[i];
+    const right = items[i + half];
 
-    const label = (item: (typeof LIFTING_CHECKLIST)[number]) =>
-      status[item.key] === "na" ? `${item.label} (NA)` : item.label;
+    const hLeft = drawWrappedCheck(ctx, leftX, ctx.y, status[left.key] === "yes", label(left), colW - 8);
+    const hRight = right
+      ? drawWrappedCheck(ctx, rightX, ctx.y, status[right.key] === "yes", label(right), colW - 8)
+      : 0;
 
-    drawCheckAt(ctx, leftX, ctx.y, status[left.key] === "yes", label(left));
-
-    if (right) {
-      drawCheckAt(ctx, rightX, ctx.y, status[right.key] === "yes", label(right));
-    }
-
-    ctx.y += 11.5;
+    ctx.y += Math.max(hLeft, hRight) + 2.5;
   }
+
+  ctx.y += 2;
+
+  drawSignatureRow(ctx, w, {
+    name: b.permit.applicant?.full_name ?? "",
+    department: b.permit.applicant?.department ?? "",
+    submitted_at: stage?.submitted_at,
+  });
+}
+
+/**
+ * Draws a check box with a label that wraps inside maxW, and returns the
+ * height used. Prevents long labels from running into the next column.
+ */
+function drawWrappedCheck(
+  ctx: DrawCtx,
+  x: number,
+  yFromTop: number,
+  checked: boolean,
+  label: string,
+  maxW: number,
+): number {
+  const lines = wrap(label, ctx.font, 8, maxW - 13);
+  drawCheckAt(ctx, x, yFromTop, checked, lines[0] ?? "");
+
+  for (let i = 1; i < lines.length; i++) {
+    text(ctx.page, lines[i], x + 13.2, yFromTop - 0.5 + i * 9.6, {
+      font: ctx.font,
+      size: 8,
+    });
+  }
+
+  return Math.max(9.5, lines.length * 9.6);
+}
+
+/** Stage I of the Hazardous Work Permit (FOI-SG-057 for now): Type of Work + Precautions. */
+function drawHazardousStage1(ctx: DrawCtx, b: PdfBundle, w: number) {
+  const stage = b.stages.find((s) => s.stage === "I");
+  const data = (stage?.data ?? {}) as {
+    checklist_status?: Record<string, string>;
+    others_text?: string;
+    precaution_other?: string;
+  };
+  const status = data.checklist_status ?? {};
+
+  for (const lineText of wrap(BUNKERING_STAGE_I_DECLARATION, ctx.font, 8.3, w - 12)) {
+    text(ctx.page, lineText, MARGIN + 7, ctx.y, { font: ctx.font, size: 8.3 });
+    ctx.y += 10;
+  }
+
+  ctx.y += 3;
+  text(ctx.page, "Type of Work", MARGIN + 7, ctx.y, { font: ctx.fontBold, size: 8.3 });
+  ctx.y += 11;
+
+  const leftX = MARGIN + 7;
+  const colW = (w - 14) / 2;
+  const rightX = leftX + colW;
+
+  const work: { label: string; checked: boolean }[] = [
+    ...BUNKERING_TYPE_OF_WORK.map((i) => ({
+      label: i.label,
+      checked: status[i.key] === "yes",
+    })),
+    {
+      label: `Others ${data.others_text ? data.others_text : "_____________________"}`,
+      checked: !!data.others_text,
+    },
+  ];
+
+  const half = Math.ceil(work.length / 2);
+
+  for (let i = 0; i < half; i++) {
+    const l = work[i];
+    const r = work[i + half];
+    const hL = drawWrappedCheck(ctx, leftX, ctx.y, l.checked, l.label, colW - 8);
+    const hR = r ? drawWrappedCheck(ctx, rightX, ctx.y, r.checked, r.label, colW - 8) : 0;
+    ctx.y += Math.max(hL, hR) + 2.5;
+  }
+
+  ctx.y += 3;
+  text(ctx.page, "Precautions:", MARGIN + 7, ctx.y, { font: ctx.fontBold, size: 8.3 });
+  ctx.y += 11;
+
+  for (const item of BUNKERING_PRECAUTIONS) {
+    ctx.y += drawWrappedCheck(ctx, leftX, ctx.y, status[item.key] === "yes", item.label, w - 20) + 2.5;
+  }
+
+  ctx.y +=
+    drawWrappedCheck(
+      ctx,
+      leftX,
+      ctx.y,
+      !!data.precaution_other,
+      data.precaution_other || "_____________________________________________",
+      w - 20,
+    ) + 2.5;
 
   ctx.y += 2;
 
@@ -880,10 +1069,11 @@ function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
       rectification_date?: string;
     }) ?? {};
 
-  const lifting = isLiftingPermit(b.permit.permit_type);
+  const bunkering = isBunkeringPermit(b.permit.permit_type);
+  const lifting = isLiftingPermit(b.permit.permit_type) || bunkering;
 
   const intro = lifting
-    ? "I had conducted a physical check and the application is supported. I hereby certify that I have examined the above stated location and that the said location is fit or not fit for the lifting work."
+    ? `I had conducted a physical check and the application is supported. I hereby certify that I have examined the above stated location and that ${bunkering ? "the said location is:" : "the said location is fit or not fit for the lifting work."}`
     : "I have reviewed the permit submission, supporting evidence, work conditions, and required safety controls. Based on this condition verification, I confirm whether the stated hot work location is fit to proceed.";
 
   const introLines = wrap(intro, ctx.font, 8.2, w - 12);
@@ -909,7 +1099,7 @@ function drawStage2(ctx: DrawCtx, b: PdfBundle, w: number) {
     return;
   }
 
-  const workLabel = lifting ? "LIFTING" : "HOT WORK";
+  const workLabel = bunkering ? "WORK" : lifting ? "LIFTING" : "HOT WORK";
   const resultLabel =
     data.fit === true ? `FIT FOR ${workLabel}` : `NOT FIT FOR ${workLabel}`;
 
@@ -1130,7 +1320,9 @@ function drawStage3(ctx: DrawCtx, b: PdfBundle, w: number) {
       reason?: string;
     }) ?? {};
 
-  const stage3Wording = isLiftingPermit(b.permit.permit_type)
+  const stage3Wording = isBunkeringPermit(b.permit.permit_type)
+    ? BUNKERING_STAGE_III_WORDING
+    : isLiftingPermit(b.permit.permit_type)
     ? "I have evaluated the hazards and risks associated with the lifting operation and confirm that the work area and its surroundings have been inspected and assessed for safe execution."
     : STAGE_III_SIMOPS_WORDING;
   const lines = wrap(stage3Wording, ctx.font, 8.2, w - 12);
@@ -1176,7 +1368,11 @@ function drawStage4(ctx: DrawCtx, b: PdfBundle, w: number) {
   const stage = b.stages.find((s) => s.stage === "IV");
 
   const note = `Completion of ${
-    isLiftingPermit(b.permit.permit_type) ? "the lifting work" : "hot work"
+    isBunkeringPermit(b.permit.permit_type)
+      ? "the work"
+      : isLiftingPermit(b.permit.permit_type)
+        ? "the lifting work"
+        : "hot work"
   } has been notified. Identity, department, date, and time are recorded from the authenticated session.`;
 
   const lines = wrap(note, ctx.font, 8.2, w - 12);
